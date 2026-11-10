@@ -7,6 +7,7 @@ import { MobileNav } from './components/MobileNav';
 import { Sidebar, type ViewKey } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { PairingDialog } from './components/PairingDialog';
+import { IncomingDialog } from './components/IncomingDialog';
 import { useToasts } from './components/Toasts';
 import { Workspace } from './views/Workspace';
 import { History } from './views/History';
@@ -110,6 +111,7 @@ export default function App() {
       </div>
       <MobileNav view={route.view} onNavigate={navigate} />
       <PairingDialog open={pairing.open} initialInvite={pairing.invite ?? null} onClose={() => setPairing({ open: false })} />
+      <IncomingDialog />
     </div>
   );
 }

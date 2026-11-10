@@ -66,6 +66,8 @@ type AppContextValue = {
   queue: QueueItem[];
   inbox: Array<{ transferId: string; name: string; mime: string; at: number }>;
   dismissInbox: (transferId: string) => void;
+  incoming: { deviceId: string; deviceName: string; name: string; size: number } | null;
+  answerIncoming: (accepted: boolean) => void;
   pairToken: string | undefined;
   addFiles: (files: File[]) => Promise<void>;
   removeQueued: (id: string) => void;
@@ -127,6 +129,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [session, setSession] = useState<{ key: number; pairToken?: string }>({ key: 0 });
   const [inbox, setInbox] = useState<Array<{ transferId: string; name: string; mime: string; at: number }>>([]);
+  const [incoming, setIncoming] = useState<{
+    deviceId: string;
+    deviceName: string;
+    name: string;
+    size: number;
+    resolve: (accepted: boolean) => void;
+  } | null>(null);
 
   const relayRef = useRef<RelayClient | null>(null);
   const meshRef = useRef<PeerMesh | null>(null);
@@ -289,6 +298,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
           peersRef.current.find((peer) => peer.id === deviceId)?.name ??
           'Paired device',
         autoAccept: () => settingsRef.current.autoReceive,
+        requestAccept: (deviceId, name, size) =>
+          new Promise<boolean>((resolve) => {
+            setIncoming({
+              deviceId,
+              name,
+              size,
+              deviceName:
+                devicesRef.current.find((device) => device.id === deviceId)?.name ??
+                peersRef.current.find((peer) => peer.id === deviceId)?.name ??
+                t('common.unknownDevice'),
+              resolve,
+            });
+          }),
       },
     });
     meshRef.current = mesh;
@@ -574,6 +596,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toasts.push({ tone: 'info', title: t('toast.cleared') });
   }, [toasts]);
 
+  const answerIncoming = useCallback(
+    (accepted: boolean) => {
+      setIncoming((current) => {
+        current?.resolve(accepted);
+        return null;
+      });
+    },
+    [],
+  );
+
   const dismissInbox = useCallback((transferId: string) => {
     setInbox((current) => current.filter((item) => item.transferId !== transferId));
   }, []);
@@ -644,6 +676,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       queue,
       inbox,
       dismissInbox,
+      incoming: incoming ? { deviceId: incoming.deviceId, deviceName: incoming.deviceName, name: incoming.name, size: incoming.size } : null,
+      answerIncoming,
       pairToken: session.pairToken,
       addFiles,
       removeQueued,
@@ -686,6 +720,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       queue,
       inbox,
       dismissInbox,
+      incoming,
+      answerIncoming,
       session.pairToken,
       addFiles,
       removeQueued,
@@ -713,6 +749,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const debug = () => ({
       relay: relayRef.current?.currentState ?? 'idle',
       signalUrl,
+      ice: { stun: ice.stun.length, turn: Boolean(ice.turn), turnUrls: ice.turn?.urls.length ?? 0 },
       peers: peersRef.current,
       devices: devicesRef.current.map((device) => ({ id: device.id, name: device.name })),
       links: meshRef.current?.listLinks() ?? [],

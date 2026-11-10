@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   verify:
-    name: typecheck · build · test (Node 22)
+    name: typecheck / build / unit tests (Node 22)
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +25,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 12
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -42,5 +42,32 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Test
+      - name: Unit tests
         run: pnpm test
+
+  signal:
+    name: signaling protocol (Node relay)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # tests/signal-local.mjs boots its own relay on a free port, runs 21 protocol
+      # checks, and tears it down; SIGNAL_URL would point it at an existing deployment.
+      - name: Protocol suite
+        run: pnpm test:signal

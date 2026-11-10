@@ -136,6 +136,15 @@ const DICT: Record<string, [string, string]> = {
   'text.to': ['to {name}', '发送给 {name}'],
   'text.copy': ['Copy text', '复制文字'],
 
+  'incoming.title': ['Incoming transfer', '收到传输请求'],
+  'incoming.desc': ['Auto-receive is off, so you decide before any bytes are sent.', '「自动接收」已关闭，传输开始前由你决定。'],
+  'incoming.accept': ['Accept', '接收'],
+  'incoming.decline': ['Decline', '拒绝'],
+  'incoming.from': ['from {name}', '来自 {name}'],
+  'incoming.note': [
+    'Accepting starts a direct peer-to-peer transfer. Nothing is stored on a server at any point.',
+    '接受后开始点对点传输，全程不经过任何服务器存储。',
+  ],
   'inbox.title': ['Just arrived', '刚收到'],
   'inbox.count': ['{n} file(s)', '{n} 个文件'],
   'inbox.save': ['Save', '保存'],

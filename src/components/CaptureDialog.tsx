@@ -1,12 +1,14 @@
 import { Camera, Check, Crop, ImageDown, Monitor, ScanLine } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { dragToRect, MIN_CROP, stageRectToImage } from '../lib/crop';
+import type { Rect as CropRect } from '../lib/crop';
 import { t } from '../lib/i18n';
 import { useApp } from '../state/app';
 import { useToasts } from './Toasts';
 import { Badge, Button, Dialog } from './ui';
 
 type Shot = { file: File; url: string; width: number; height: number };
-type Rect = { x: number; y: number; w: number; h: number };
+type Rect = CropRect;
 
 /**
  * Built-in capture tool, no external software:
@@ -156,22 +158,8 @@ export function CaptureDialog({ open, onClose }: { open: boolean; onClose: () =>
   const normalize = (area: Rect): Rect | null => {
     if (!raw) return null;
     const box = stageRef.current?.getBoundingClientRect();
-    if (!box || box.width === 0 || box.height === 0) return null;
-    const scale = Math.min(box.width / raw.width, box.height / raw.height);
-    const offsetX = (box.width - raw.width * scale) / 2;
-    const offsetY = (box.height - raw.height * scale) / 2;
-    const x = (area.x - offsetX) / scale;
-    const y = (area.y - offsetY) / scale;
-    const w = area.w / scale;
-    const h = area.h / scale;
-    const clamped: Rect = {
-      x: Math.max(0, Math.min(x, raw.width - 1)),
-      y: Math.max(0, Math.min(y, raw.height - 1)),
-      w: Math.min(w, raw.width - Math.max(0, x)),
-      h: Math.min(h, raw.height - Math.max(0, y)),
-    };
-    if (clamped.w < 8 || clamped.h < 8) return null;
-    return clamped;
+    if (!box) return null;
+    return stageRectToImage(area, { width: box.width, height: box.height }, { width: raw.width, height: raw.height });
   };
 
   const keepRegion = async (area: Rect | null) => {
@@ -260,13 +248,9 @@ export function CaptureDialog({ open, onClose }: { open: boolean; onClose: () =>
             onPointerMove={(event) => {
               if (!dragging || !dragStart.current) return;
               const point = pointerPos(event);
-              const start = dragStart.current;
-              setRect({
-                x: Math.min(start.x, point.x),
-                y: Math.min(start.y, point.y),
-                w: Math.abs(point.x - start.x),
-                h: Math.abs(point.y - start.y),
-              });
+              const box = stageRef.current?.getBoundingClientRect();
+              if (!box) return;
+              setRect(dragToRect(dragStart.current, point, { width: box.width, height: box.height }));
             }}
             onPointerUp={() => {
               setDragging(false);
@@ -282,7 +266,7 @@ export function CaptureDialog({ open, onClose }: { open: boolean; onClose: () =>
               }}
               className="mx-auto block h-auto max-h-[52vh] w-auto max-w-full"
             />
-            {rect && rect.w > 2 && rect.h > 2 ? (
+            {rect && rect.w > MIN_CROP && rect.h > MIN_CROP ? (
               <>
                 <div className="pointer-events-none absolute inset-0 bg-black/45" />
                 <div
@@ -299,8 +283,8 @@ export function CaptureDialog({ open, onClose }: { open: boolean; onClose: () =>
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" onClick={() => void keepRegion(rect && rect.w > 2 && rect.h > 2 ? rect : null)} loading={busy}>
-              <Crop className="size-4" /> {rect && rect.w > 2 ? t('cap.useRegion') : t('cap.useFull')}
+            <Button variant="primary" onClick={() => void keepRegion(rect && rect.w > MIN_CROP && rect.h > MIN_CROP ? rect : null)} loading={busy}>
+              <Crop className="size-4" /> {rect && rect.w > MIN_CROP && rect.h > MIN_CROP ? t('cap.useRegion') : t('cap.useFull')}
             </Button>
             <Button variant="ghost" onClick={() => void captureScreen()}>{t('cap.retake')}</Button>
             <Button variant="ghost" onClick={reset}>{t('common.cancel')}</Button>

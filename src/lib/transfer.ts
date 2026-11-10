@@ -42,6 +42,8 @@ export type TransferEvents = {
   onPeerVerified: (deviceId: string, verified: boolean, publicKey?: string) => void;
   resolveDeviceName: (deviceId: string) => string;
   autoAccept: () => boolean;
+  /** Called when auto-receive is off; resolve true to accept the transfer. */
+  requestAccept?: (deviceId: string, name: string, size: number) => Promise<boolean>;
 };
 
 type Pending = {
@@ -286,7 +288,9 @@ export class TransferEngine {
     const meta = decodeJsonFrame<{ transferId: string; name: string; mime: string; size: number; sha256: string }>(payload);
     if (!meta?.transferId || typeof meta.size !== 'number') return;
     const deviceName = this.options.events.resolveDeviceName(deviceId);
-    if (!this.options.events.autoAccept()) {
+    const autoAccept = this.options.events.autoAccept();
+    const accepted = autoAccept || (await this.options.events.requestAccept?.(deviceId, meta.name, meta.size)) === true;
+    if (!accepted) {
       this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.REJECT, { transferId: meta.transferId, reason: 'declined' }));
       this.options.events.onNotice({ level: 'warn', title: t('notice.declined'), body: t('notice.declinedBody') });
       return;

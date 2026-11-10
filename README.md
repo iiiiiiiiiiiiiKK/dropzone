@@ -70,6 +70,9 @@
 - 🧮 **SHA-256 完整性校验**：边传边计算增量哈希，接收端比对；不一致会明确报错而非静默接受。
 - ⏯️ **会话内续传**：链路中断后从最后确认的块偏移继续；刷新页面则标记为 `interrupted`，只能重新开始。
 - 🔔 **通知提示**：连接、进度、完成与失败都有 toast。
+- ✅ **接收前确认**：关闭「自动接收」后，收到文件会先弹出确认框（显示来源设备、文件名与大小），任何字节开始传输前由你决定；拒绝时会明确告知发送方，而不是无响应失败。
+- 📥 **刚收到货架**：收到的文件以卡片形式列在工作台顶部，一次点击即可保存；历史记录整行可点（图片开灯箱预览，其他类型直接下载），内容已被保留策略清理时给出明确提示。
+- 🗜️ **打包下载**：历史页可把全部已接收文件一次性打成 ZIP（编码器按需加载，不进首屏）。
 - 🗂️ **纯本地历史**：传输记录、收藏与文本便签只存在本机 IndexedDB。
 - 💾 **存储用量与导出/清空**：查看配额占用、导出 JSON 快照、按需清空历史。
 - 🌗 **主题切换**：默认深色，可切浅色，按设备持久化。
@@ -256,6 +259,7 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 - ⏯️ **Resume inside a live session** — a dropped transfer restarts from the last acknowledged chunk offset while the session is alive.
 - 🔔 **Notification toasts** — connect, progress milestones, completion and failures.
 - 📥 **Arrival shelf** — every received file is listed for one click ("Save") instead of being buried in history; clicking a row in the history opens images in a viewer or saves the file, and a row whose bytes were pruned says so instead of doing nothing.
+- ✅ **Accept or decline** — with auto-receive off, the receiver gets a prompt showing the sender, file name and size *before* any bytes flow; declining tells the sender explicitly instead of failing silently.
 - 🗜️ **Download ZIP** — batch-pack every received file from the history into one archive (the encoder is lazy-loaded, so it costs nothing until used).
 - 🔁 **Presence that self-heals** — heartbeat pings detect a dead relay socket and reconnect, and the app re-announces presence every 30 s so a sleeping phone shows up again without a manual refresh.
 

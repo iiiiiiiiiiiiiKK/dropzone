@@ -92,7 +92,7 @@ export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) 
               {t('ws.viewAll')} <ArrowRight className="size-3.5" />
             </button>
           </div>
-          <div className="p-2">
+          <div className="p-2.5">
             {recent.length === 0 ? (
               <EmptyState
                 icon={<Sparkles className="size-4" />}
@@ -107,7 +107,7 @@ export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) 
                 }
               />
             ) : (
-              <ul className="space-y-0.5">
+              <ul className="space-y-1.5">
                 {recent.map((record) => (
                   <TransferRow
                     key={record.id}

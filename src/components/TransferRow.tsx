@@ -121,7 +121,10 @@ export function TransferRow({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, height: 0 }}
       className={cn(
-        'group relative flex items-start gap-3 rounded-xl border border-transparent px-2.5 py-2.5 transition-colors hover:border-line hover:bg-surface-2/60',
+        'group relative flex items-start gap-3 rounded-xl border px-2.5 py-2.5 transition-all',
+        record.direction === 'in'
+          ? 'border-accent-line/45 bg-accent-soft/35 hover:border-accent-line/70 hover:bg-accent-soft/55'
+          : 'border-line bg-surface-2/45 hover:border-line-strong hover:bg-surface-2/70',
         compact ? '' : 'sm:px-3',
       )}
     >

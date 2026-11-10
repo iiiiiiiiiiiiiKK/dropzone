@@ -123,7 +123,7 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
             description={favoritesOnly ? t('hist.emptyFavDesc') : t('hist.emptyDesc')}
           />
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="space-y-1.5">
             {rows.map((record) => (
               <TransferRow
                 key={record.id}

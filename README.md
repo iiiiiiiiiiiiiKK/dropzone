@@ -72,6 +72,7 @@
 - 🔔 **通知提示**：连接、进度、完成与失败都有 toast。
 - ✅ **接收前确认**：关闭「自动接收」后，收到文件会先弹出确认框（显示来源设备、文件名与大小），任何字节开始传输前由你决定；拒绝时会明确告知发送方，而不是无响应失败。
 - 📥 **刚收到货架**：收到的文件以卡片形式列在工作台顶部，一次点击即可保存；历史记录整行可点（图片开灯箱预览，其他类型直接下载），内容已被保留策略清理时给出明确提示。
+- 🗂️ **传输记录卡片**：最近传输/历史里的每一条也有淡色底——收到为紫调、发出为中性灰，配方向色条与圆角描边，悬停时加深；状态、速度、错误信息都在卡片内呈现，不再是白底列表。
 - 💬 **消息记录卡片**：文字面板下方的历史不再是一排白底文字——收到（紫调）与发出（中性灰）各有底色与左侧色条，一眼区分方向；点复制按钮会变成绿色 ✓ 并保持 1.6 秒，复制成功与否立刻可见。
 - 🗜️ **打包下载**：历史页可把全部已接收文件一次性打成 ZIP（编码器按需加载，不进首屏）。
 - 🗂️ **纯本地历史**：传输记录、收藏与文本便签只存在本机 IndexedDB。
@@ -276,6 +277,7 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 - ⏯️ **Resume inside a live session** — a dropped transfer restarts from the last acknowledged chunk offset while the session is alive.
 - 🔔 **Notification toasts** — connect, progress milestones, completion and failures.
 - 📥 **Arrival shelf** — every received file is listed for one click ("Save") instead of being buried in history; clicking a row in the history opens images in a viewer or saves the file, and a row whose bytes were pruned says so instead of doing nothing.
+- 🗂️ **Tinted transfer rows** — every entry in Recent transfers and History is its own card: received files get a violet wash and sent files a neutral one, each with a direction stripe, rounded border and a hover lift, so a long list stays readable at a glance.
 - 💬 **Message cards** — the text panel's history is no longer a flat list: received notes get a violet tint and sent notes a neutral one, each with a direction stripe, and the copy button turns into a green ✓ for 1.6 s so a successful copy is obvious.
 - ✅ **Accept or decline** — with auto-receive off, the receiver gets a prompt showing the sender, file name and size *before* any bytes flow; declining tells the sender explicitly instead of failing silently.
 - 🗜️ **Download ZIP** — batch-pack every received file from the history into one archive (the encoder is lazy-loaded, so it costs nothing until used).

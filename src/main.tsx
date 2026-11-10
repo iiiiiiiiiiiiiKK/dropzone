@@ -23,9 +23,9 @@ try {
 }
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('./sw.js').catch(() => undefined);
-  });
+  const registerShell = () => void navigator.serviceWorker.register('./sw.js').catch(() => undefined);
+  if (document.readyState === 'complete') registerShell();
+  else window.addEventListener('load', registerShell, { once: true });
 }
 
 const container = document.getElementById('root');

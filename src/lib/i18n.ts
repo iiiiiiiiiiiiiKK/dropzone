@@ -45,7 +45,10 @@ const DICT: Record<string, [string, string]> = {
   ],
   'cap.pickInstead': ['Pick an image instead', '改为选择图片'],
   'cap.unsupported': ['This browser cannot capture the screen.', '当前浏览器不支持屏幕捕获。'],
-  'cap.failed': ['The capture produced no image.', '捕获没有产生图像。'],
+  'cap.failed': [
+    'The capture produced no image. Try again and keep the shared window visible for a second, or use Pick an image instead.',
+    '这次捕获没有画面。请重试，并让被共享的窗口保持可见一秒；也可以点「改为选择图片」。',
+  ],
   'cap.privacy': ['Captures stay in this browser until you send them; nothing is uploaded.', '截图只留在本浏览器，除非你发送，否则不会上传。'],
   'cap.staged': ['Screenshot staged', '截图已加入待发送'],
   'cap.stagedBody': ['Pick a device and hit send.', '选择设备后点击发送。'],

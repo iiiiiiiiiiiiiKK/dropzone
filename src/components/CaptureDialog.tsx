@@ -77,6 +77,39 @@ export function CaptureDialog({ open, onClose }: { open: boolean; onClose: () =>
     return await new Promise<Blob | null>((resolve) => canvas.toBlob((value) => resolve(value), 'image/png'));
   };
 
+  /** Draws the live stream into a bitmap after the first frames have arrived. */
+  const paint = async (stream: MediaStream, width: number, height: number) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error(t('cap.failed'));
+    // Draw through an offscreen <video> that has actually produced frames.
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    video.muted = true;
+    video.playsInline = true;
+    video.style.cssText = 'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none';
+    document.body.appendChild(video);
+    try {
+      const started = video.play();
+      if (started && typeof started.then === 'function') await started.catch(() => undefined);
+      const deadline = Date.now() + 4000;
+      while (video.videoWidth === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 220));
+      context.drawImage(video, 0, 0, width, height);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((value) => resolve(value), 'image/png'));
+      if (!blob) throw new Error(t('cap.failed'));
+      const bitmap = await createImageBitmap(blob);
+      setRaw({ bitmap, width: bitmap.width, height: bitmap.height });
+      setRect(null);
+    } finally {
+      video.remove();
+    }
+  };
+
   const captureScreen = async () => {
     setError('');
     setBusy(true);
@@ -89,32 +122,40 @@ export function CaptureDialog({ open, onClose }: { open: boolean; onClose: () =>
       const video = document.createElement('video');
       video.srcObject = stream;
       video.muted = true;
-      await video.play();
-      // Two frames of headroom so the first paint is never black.
-      await new Promise((resolve) => setTimeout(resolve, 240));
-      const track = stream.getVideoTracks()[0];
-      const settings = track.getSettings();
-      const width = settings.width ?? video.videoWidth;
-      const height = settings.height ?? video.videoHeight;
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext('2d')?.drawImage(video, 0, 0, width, height);
-      stream.getTracks().forEach((entry) => entry.stop());
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((value) => resolve(value), 'image/png'));
-      if (!blob) throw new Error(t('cap.failed'));
-      const bitmap = await createImageBitmap(blob);
-      setRaw({ bitmap, width: bitmap.width, height: bitmap.height });
-      setRect(null);
+      video.playsInline = true;
+      video.setAttribute('playsinline', 'true');
+      // A detached <video> can refuse to start in some browsers, so keep it in the
+      // DOM (invisible) and never block the flow on a play() promise that stalls.
+      video.style.cssText = 'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none';
+      document.body.appendChild(video);
+      try {
+        await Promise.race([video.play().catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 1500))]);
+        const deadline = Date.now() + 3000;
+        while (video.videoWidth === 0 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 60));
+        }
+        // Two frames of headroom so the first paint is never black.
+        await new Promise((resolve) => setTimeout(resolve, 240));
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        const width = video.videoWidth || settings.width || 0;
+        const height = video.videoHeight || settings.height || 0;
+        // Never paint from the probe <video>; hand the stream to the canvas helper.
+        if (!width || !height) throw new Error(t('cap.failed'));
+        await paint(stream, width, height);
+      } finally {
+        video.remove();
+        stream.getTracks().forEach((entry) => entry.stop());
+      }
     } catch (cause) {
       const message = (cause as Error).message;
       if (message === t('cap.unsupported') || message === t('cap.failed')) setError(message);
-      else if (/denied|NotAllowed/i.test(message)) setError(t('cap.denied'));
       else setError(t('cap.denied'));
     } finally {
       setBusy(false);
     }
   };
+
 
   const startCamera = async () => {
     setError('');

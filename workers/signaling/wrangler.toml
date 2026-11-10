@@ -1,0 +1,50 @@
+# DROPZONE signaling — Cloudflare Worker + Durable Object deployment config.
+#
+# Deploy:   wrangler deploy --config workers/signaling/wrangler.toml
+# Local:    wrangler dev --config workers/signaling/wrangler.toml
+# Secrets:  wrangler secret put TURN_SECRET --config workers/signaling/wrangler.toml
+#
+# The Worker binds exactly one Durable Object instance named 'relay-main'
+# (see env.RELAY.idFromName('relay-main') in index.mjs), which owns every
+# WebSocket connection for the relay.
+
+name = "dropzone-signaling"
+main = "index.mjs"
+compatibility_date = "2025-06-01"
+workers_dev = true
+
+# Serve the same origin as the Worker for /health, /turn, /config.json and /ws.
+# Uncomment and set your zone to use a custom hostname instead of *.workers.dev.
+# routes = [
+#   { pattern = "signal.example.com", custom_domain = true }
+# ]
+
+[observability]
+enabled = true
+
+[vars]
+# Comma-separated browser origins allowed to open /ws (empty = allow any origin).
+ALLOWED_ORIGINS = ""
+# Comma-separated coturn URLs handed to clients; empty disables TURN.
+TURN_URLS = ""
+# Optional coturn username prefix (default: none, username = "<expiry>:<deviceId>").
+TURN_USERNAME_PREFIX = ""
+# Comma-separated STUN URLs used when STUN_URLS is empty.
+STUN_URLS = "stun:stun.l.google.com:19302"
+TURN_TTL_SECONDS = "3600"
+PAIRING_TTL_SECONDS = "300"
+
+# Secrets are NOT set here. Use:
+#   wrangler secret put TURN_SECRET --config workers/signaling/wrangler.toml
+# or CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID in CI.
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "Relay"
+
+# SQLite-backed Durable Object. Cloudflare requires `new_sqlite_classes` on the
+# free plan; the relay keeps invites, pair links and device records in DO storage
+# so state survives hibernation.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Relay"]

@@ -1,0 +1,83 @@
+# DROPZONE self-hosting: signaling service + coturn relay.
+#
+#   cp .env.example .env          # set TURN_SECRET, ALLOWED_ORIGINS, EXTERNAL_IP
+#   docker compose up -d --build
+#   docker compose logs -f signal
+#
+# The signaling container publishes on loopback only: terminate TLS in front of
+# it (Caddy or Nginx, see docs/deployment.md) and proxy wss://host/ws to
+# 127.0.0.1:8787. coturn publishes UDP relay ports directly to the internet.
+name: dropzone
+
+services:
+  signal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dropzone-signal:local
+    restart: unless-stopped
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
+      MAX_CLIENTS: "${MAX_CLIENTS:-1000}"
+      MAX_SIGNAL_BYTES: "${MAX_SIGNAL_BYTES:-32768}"
+      PAIRING_TTL_SECONDS: "${PAIRING_TTL_SECONDS:-300}"
+      TURN_URLS: "${TURN_URLS:-}"
+      TURN_SECRET: "${TURN_SECRET:-}"
+      TURN_TTL_SECONDS: "${TURN_TTL_SECONDS:-3600}"
+      STUN_URLS: "${STUN_URLS:-stun:stun.l.google.com:19302}"
+      SIGNAL_PUBLIC_URL: "${SIGNAL_PUBLIC_URL:-}"
+    ports:
+      - "127.0.0.1:8787:8787"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  coturn:
+    image: coturn/coturn:4.6.2-alpine
+    restart: unless-stopped
+    depends_on:
+      signal:
+        condition: service_healthy
+    environment:
+      # Same secret the signaling service signs short-lived credentials with.
+      TURN_SECRET: "${TURN_SECRET:?set TURN_SECRET in .env}"
+      # Public IPv4 of the relay host. Empty = let coturn detect it; hosts behind
+      # NAT must set it or allocations advertise a private address.
+      EXTERNAL_IP: "${EXTERNAL_IP:-}"
+      TURNS_REALM: "${TURNS_REALM:-dropzone}"
+      TURN_PORT: "${TURN_PORT:-3478}"
+      TURN_TLS_PORT: "${TURN_TLS_PORT:-5349}"
+      TURN_MIN_PORT: "${TURN_MIN_PORT:-49160}"
+      TURN_MAX_PORT: "${TURN_MAX_PORT:-49200}"
+    volumes:
+      - ./infra/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./infra/coturn/entrypoint.sh:/etc/coturn/entrypoint.sh:ro
+      - ./infra/coturn/certs:/etc/coturn/certs:ro
+    entrypoint: ["/bin/sh", "/etc/coturn/entrypoint.sh"]
+    ports:
+      # STUN/TURN over UDP with a TCP fallback.
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      # TURN over TLS/DTLS (needs certs in infra/coturn/certs).
+      - "5349:5349/udp"
+      - "5349:5349/tcp"
+      # Relay allocation range: every relayed flow holds one UDP port in here.
+      - "49160-49200:49160-49200/udp"
+    # On a plain Linux VPS, host networking is simpler and avoids publishing 41
+    # relay ports. Drop the ports: block above when you enable this line.
+    # network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

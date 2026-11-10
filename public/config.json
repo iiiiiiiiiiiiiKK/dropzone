@@ -1,0 +1,5 @@
+{
+  "_comment": "Runtime configuration, fetched before the app boots. Set signalUrl to your own relay; leave it empty to fall back to VITE_SIGNAL_URL, then wss://<this-host>/ws.",
+  "signalUrl": "wss://dropzone-signaling.changyuansex.workers.dev/ws",
+  "stunUrls": []
+}

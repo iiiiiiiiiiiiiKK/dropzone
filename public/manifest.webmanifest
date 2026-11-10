@@ -1,0 +1,22 @@
+{
+  "name": "DROPZONE — Your Personal Transfer Space",
+  "short_name": "DROPZONE",
+  "description": "Local-first, peer-to-peer file and clipboard transfer between your own devices.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0b0d",
+  "theme_color": "#0a0b0d",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": { "title": "title", "text": "text", "url": "url", "files": [{ "name": "files", "accept": ["image/*", "*/*"] }] }
+  }
+}

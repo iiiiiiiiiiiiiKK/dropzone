@@ -1,0 +1,48 @@
+{
+  "name": "dropzone",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "description": "Your Personal Transfer Space — local-first, peer-to-peer file transfer between your own devices.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "dev:signal": "node --watch server/index.mjs",
+    "start": "node server/index.mjs",
+    "worker:dev": "wrangler dev workers/signaling/index.mjs",
+    "worker:deploy": "wrangler deploy --config workers/signaling/wrangler.toml",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:signal": "node tests/signal-local.mjs"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.8.0",
+    "dexie": "^4.0.11",
+    "framer-motion": "^12.23.12",
+    "jsqr": "^1.4.0",
+    "lucide-react": "^0.544.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.13",
+    "@types/node": "^22.15.30",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.0.2",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.6",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.158.0",
+    "ws": "^8.18.3"
+  }
+}

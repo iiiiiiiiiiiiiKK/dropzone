@@ -1,0 +1,33 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.local
+.DS_Store
+Thumbs.db
+*.log
+*.sqlite
+*.db
+
+# build + deploy artifacts
+dist/
+.wrangler/
+workers/signaling/.wrangler/
+workers/signaling/.wrangler-dryrun/
+.wrangler-dryrun/
+vite.log
+vite.err.log
+*.tsbuildinfo
+
+# local runtime state
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

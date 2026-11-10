@@ -1,0 +1,220 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root,
+html.dark {
+  --bg: #0a0b0d;
+  --bg-elev: #0d0e11;
+  --surface: #121317;
+  --surface-2: #17181d;
+  --surface-3: #1e2027;
+  --line: rgba(255, 255, 255, 0.075);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --fg: #eceef2;
+  --fg-soft: #b9bfca;
+  --muted: #868d9b;
+  --accent: #8b7bff;
+  --accent-2: #5b8cff;
+  --accent-soft: rgba(139, 123, 255, 0.14);
+  --accent-line: rgba(139, 123, 255, 0.35);
+  --ok: #3ecf8e;
+  --warn: #f5a524;
+  --err: #f2555a;
+  --glow-1: rgba(139, 123, 255, 0.18);
+  --glow-2: rgba(91, 140, 255, 0.12);
+  --shadow-card: 0 1px 0 0 rgba(255, 255, 255, 0.04) inset, 0 24px 60px -34px rgba(0, 0, 0, 0.95);
+  --shadow-pop: 0 1px 0 0 rgba(255, 255, 255, 0.05) inset, 0 40px 100px -30px rgba(0, 0, 0, 0.9);
+  color-scheme: dark;
+}
+
+html.light {
+  --bg: #f6f6f8;
+  --bg-elev: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f2f2f5;
+  --surface-3: #e9e9ee;
+  --line: rgba(12, 14, 20, 0.09);
+  --line-strong: rgba(12, 14, 20, 0.16);
+  --fg: #14161b;
+  --fg-soft: #3c414c;
+  --muted: #6a7180;
+  --accent: #6d5cf0;
+  --accent-2: #3f74e8;
+  --accent-soft: rgba(109, 92, 240, 0.12);
+  --accent-line: rgba(109, 92, 240, 0.32);
+  --ok: #12a86a;
+  --warn: #b8760a;
+  --err: #d43b40;
+  --glow-1: rgba(139, 123, 255, 0.16);
+  --glow-2: rgba(91, 140, 255, 0.1);
+  --shadow-card: 0 1px 0 0 rgba(255, 255, 255, 0.9) inset, 0 20px 50px -34px rgba(15, 20, 40, 0.35);
+  --shadow-pop: 0 1px 0 0 rgba(255, 255, 255, 0.9) inset, 0 40px 90px -34px rgba(15, 20, 40, 0.4);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-soft: var(--fg-soft);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-err: var(--err);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius-card: 20px;
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
+  }
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--fg);
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+    background-clip: content-box;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  input,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: color-mix(in oklab, var(--surface) 78%, transparent);
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+  }
+  .card-shadow {
+    box-shadow: var(--shadow-card);
+  }
+  .pop-shadow {
+    box-shadow: var(--shadow-pop);
+  }
+  .accent-gradient {
+    background-image: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  }
+  .accent-text {
+    background-image: linear-gradient(120deg, var(--accent) 10%, var(--accent-2) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hairline {
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+  .safe-top {
+    padding-top: max(env(safe-area-inset-top), 0px);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .ambient {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(900px 500px at 12% -8%, var(--glow-1), transparent 70%),
+      radial-gradient(760px 420px at 88% 4%, var(--glow-2), transparent 72%),
+      radial-gradient(700px 500px at 50% 110%, var(--glow-1), transparent 75%);
+  }
+  .ambient::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.22;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
+  }
+  .animate-in-up {
+    animation: in-up 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes in-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .shimmer {
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 22%, transparent), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

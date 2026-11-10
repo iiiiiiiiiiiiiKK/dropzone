@@ -22,7 +22,8 @@
 </p>
 
 <p align="center">
-  <a href="https://iiiiiiiiiiiiiKK.github.io/dropzone/"><strong>Live demo (static UI)</strong></a> ·
+  <a href="https://iiiiiiiiiiiiiKK.github.io/dropzone/"><strong>Live demo</strong></a> ·
+  <a href="https://dropzone-signaling.changyuansex.workers.dev/health">Relay health</a> ·
   <a href="docs/architecture.md">Architecture</a> ·
   <a href="docs/protocol.md">Protocol</a> ·
   <a href="docs/deployment.md">Deployment</a> ·
@@ -45,6 +46,7 @@
 - [Deployment](#deployment)
 - [Security and privacy](#security-and-privacy)
 - [Browser support](#browser-support)
+- [Verification status](#verification-status)
 - [Known limitations](#known-limitations)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -342,6 +344,20 @@ Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md). Do n
 | Safari on iOS 16.4+ | — | ⚠️ limited | Receiving works while the tab is foregrounded; scripted clipboard reads are unavailable, so paste comes from the system menu. |
 | Other evergreen browsers | best effort | best effort | Web Crypto + `RTCDataChannel` are required; report what breaks. |
 
+## Verification status
+
+Everything below was executed against this repository — not estimated.
+
+| Check | Harness | Result |
+| --- | --- | --- |
+| Unit tests | `pnpm test` (Vitest) | **19 passed**, 4 files: frame encoding/decoding, P-256 identity and signatures, safety numbers, pairing tokens, format helpers |
+| Signaling protocol v1 | `pnpm test:signal` | **21 checks passed** on the Node relay (single-use invites, relay-only signalling between paired peers, rate limiting, 32 KiB frame ceiling, TURN HMAC credentials, origin rejection); the same suite passes against the Worker variant under `wrangler dev` |
+| Production build | `pnpm build` | `tsc --noEmit` clean, `vite build` emits `dist/` |
+| Browser end-to-end | two real Chromium contexts, real user gestures | paired via the one-time QR/link flow, exchanged offer/answer/ICE, completed transfers of **32 B** and **150 000 B** with SHA-256 matching on both sides, files readable from the receiver's IndexedDB |
+| Live deployment | the published Pages site + the deployed Worker relay | the same end-to-end flow passed repeatedly with no console errors |
+| Responsive audit | 393×852, 820×1180, 1024×800, 1440×940 | no horizontal overflow, no clipped controls, fonts loaded, tap targets ≥ 28 px |
+| Clipboard ingest | `Ctrl/Cmd+V` with an image on the clipboard | image staged with original bytes, preview, dimensions and size; no upload involved |
+
 ## Known limitations
 
 These are real, current behaviours — not roadmap items:
@@ -494,6 +510,18 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 - 中继能看到：设备 id、显示名、设备类型、公钥、在线状态、配对邀请哈希、SDP/ICE 内容、消息大小与时序。中继看不到：文件内容、文件名、文件类型、文件大小、文本便签。
 - 中继在**对端发现**环节仍然是被信任的：它知道谁在线，理论上可以在配对时替换公钥——这正是安全码与 ECDSA 签名校验存在的理由，怀疑时可双方核对安全码。
 - TURN 只转发密文；`wss://` 是生产必需，`ws://` 仅供本地开发。
+
+### 验证状态（真实执行）
+
+| 检查项 | 方式 | 结果 |
+| --- | --- | --- |
+| 单元测试 | `pnpm test`（Vitest） | **19 个全部通过**：分帧编解码、P-256 身份与签名、安全码、配对令牌、格式化函数 |
+| 信令协议 v1 | `pnpm test:signal` | Node 中继上 **21 项检查通过**（一次性邀请、仅已配对设备可转发、限流、32 KiB 帧上限、TURN HMAC 凭证、来源拒绝）；同一套测试在 `wrangler dev` 的 Worker 变体上同样通过 |
+| 生产构建 | `pnpm build` | `tsc --noEmit` 无错误，`vite build` 产出 `dist/` |
+| 浏览器端到端 | 两个真实 Chromium 上下文 + 真实用户操作 | 通过一次性二维码/链接完成配对，交换 offer/answer/ICE，**32 B** 与 **150 000 B** 文件传输完成后双方 SHA-256 一致，接收端可从 IndexedDB 读出文件 |
+| 线上部署 | 线上 GitHub Pages + 已部署的 Worker 中继 | 同一套端到端流程多次通过，控制台无报错 |
+| 响应式检查 | 393×852、820×1180、1024×800、1440×940 | 无横向溢出、无控件裁切、字体正常加载、触控目标 ≥ 28 px |
+| 剪贴板 | 剪贴板中放图片后按 `Ctrl/Cmd+V` | 原始字节入队，显示缩略图、尺寸与大小，全程不上传 |
 
 ### 已知限制（真实行为）
 

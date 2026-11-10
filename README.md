@@ -99,6 +99,7 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 - 🗂️ **Local-only history** — transfers, favorites and text notes in IndexedDB; nothing syncs anywhere.
 - 💾 **Storage usage + export/clear** — see quota usage, export a JSON snapshot, clear history on demand.
 - 🌗 **Theme switch** — dark by default, light option persisted per device.
+- 🌐 **Bilingual UI** — English and 简体中文, switchable from the top bar (𝕏 / 🌐 button) or Settings without reloading; the choice is stored per device and the whole interface — buttons, dialogs, toasts, transfer states and relative timestamps — follows it.
 - 📱 **Responsive layout** — desktop workbench with sidebar, right device rail and history table; mobile layout with bottom navigation and safe-area insets.
 - 📲 **Installable PWA** — manifest, service worker shell cache, standalone window.
 
@@ -131,6 +132,13 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 </p>
 
 <p align="center"><em>Mobile layout at 393×852 — bottom tab bar, safe-area insets, touch-sized targets, same local history.</em></p>
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-zh.png" alt="DROPZONE interface in Simplified Chinese" width="640" />
+  <img src="docs/screenshots/mobile-zh.png" alt="DROPZONE mobile interface in Simplified Chinese" width="196" />
+</p>
+
+<p align="center"><em>Same build, switched to 简体中文 from the top bar — no reload, no separate bundle.</em></p>
 
 ## Architecture
 
@@ -357,6 +365,7 @@ Everything below was executed against this repository — not estimated.
 | Live deployment | the published Pages site + the deployed Worker relay | the same end-to-end flow passed repeatedly with no console errors |
 | Responsive audit | 393×852, 820×1180, 1024×800, 1440×940 | no horizontal overflow, no clipped controls, fonts loaded, tap targets ≥ 28 px |
 | Clipboard ingest | `Ctrl/Cmd+V` with an image on the clipboard | image staged with original bytes, preview, dimensions and size; no upload involved |
+| Bilingual switch | top-bar language button, both directions, plus reload | every screen, dialog, toast and transfer state switches instantly; the choice survives a reload; no horizontal overflow in 中文 at 393 and 1440 px |
 
 ## Known limitations
 
@@ -433,12 +442,20 @@ MIT © 2025 DROPZONE contributors (0xkillcoin). See [LICENSE](LICENSE).
 - 🗂️ **纯本地历史**：传输记录、收藏与文本便签只存在本机 IndexedDB。
 - 💾 **存储用量与导出/清空**：查看配额占用、导出 JSON 快照、按需清空历史。
 - 🌗 **主题切换**：默认深色，可切浅色，按设备持久化。
+- 🌐 **中英双语界面**：顶栏语言按钮或「设置 → 语言」一键切换 English / 简体中文，无需刷新；按钮、弹窗、提示、传输状态与相对时间全部跟随，选择按设备保存。
 - 📱 **响应式布局**：桌面端工作台（侧边栏 + 设备栏 + 历史表格），移动端底部导航与安全区内边距。
 - 📲 **可安装 PWA**：manifest、Service Worker 静态壳缓存、独立窗口运行。
 
 ### 截图
 
-见上方英文区的 Screenshots 小节：桌面深色/浅色、移动端、配对二维码、传输历史、设置。
+见上方英文区的 Screenshots 小节：桌面深色/浅色、移动端、配对二维码、传输历史、设置，以及中文界面（`docs/screenshots/dashboard-zh.png`、`mobile-zh.png`）。
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-zh.png" alt="DROPZONE 中文界面" width="820" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/mobile-zh.png" alt="DROPZONE 中文移动端界面" width="248" />
+</p>
 
 ### 架构要点
 

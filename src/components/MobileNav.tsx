@@ -1,13 +1,14 @@
 import { Clock3, LayoutGrid, Settings, Smartphone, Star } from 'lucide-react';
+import { t } from '../lib/i18n';
 import type { ViewKey } from './Sidebar';
 import { cn } from '../lib/utils';
 
-const ITEMS: Array<{ key: ViewKey; label: string; icon: typeof LayoutGrid }> = [
-  { key: 'workspace', label: 'Send', icon: LayoutGrid },
-  { key: 'history', label: 'History', icon: Clock3 },
-  { key: 'favorites', label: 'Saved', icon: Star },
-  { key: 'devices', label: 'Devices', icon: Smartphone },
-  { key: 'settings', label: 'Settings', icon: Settings },
+const ITEMS: Array<{ key: ViewKey; labelKey: string; icon: typeof LayoutGrid }> = [
+  { key: 'workspace', labelKey: 'nav.mobileSend', icon: LayoutGrid },
+  { key: 'history', labelKey: 'nav.mobileHistory', icon: Clock3 },
+  { key: 'favorites', labelKey: 'nav.mobileSaved', icon: Star },
+  { key: 'devices', labelKey: 'nav.mobileDevices', icon: Smartphone },
+  { key: 'settings', labelKey: 'nav.mobileSettings', icon: Settings },
 ];
 
 export function MobileNav({ view, onNavigate }: { view: ViewKey; onNavigate: (view: ViewKey) => void }) {
@@ -26,7 +27,7 @@ export function MobileNav({ view, onNavigate }: { view: ViewKey; onNavigate: (vi
               <span className={cn('grid size-9 place-items-center rounded-xl transition-colors', active ? 'bg-accent-soft' : '')}>
                 <item.icon className="size-[18px]" />
               </span>
-              {item.label}
+              {t(item.labelKey)}
             </button>
           );
         })}

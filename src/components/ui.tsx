@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Loader2, X } from 'lucide-react';
 import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
@@ -225,7 +226,7 @@ export function Dialog({
                 </h2>
                 {description ? <p className="mt-1 text-[13px] leading-relaxed text-muted">{description}</p> : null}
               </div>
-              <IconButton label="Close dialog" onClick={onClose} className="-mr-1 -mt-1">
+              <IconButton label={t('common.close')} onClick={onClose} className="-mr-1 -mt-1">
                 <X className="size-4" />
               </IconButton>
             </div>

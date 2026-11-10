@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Camera, ClipboardPaste, FilePlus2, Link2, Sparkles, Type } from 'lucide-react';
 import { useState } from 'react';
 import { pickFiles, readClipboardDirect } from '../lib/clipboard';
+import { t } from '../lib/i18n';
 import { isTouchDevice } from '../lib/utils';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { useApp } from '../state/app';
@@ -38,31 +39,23 @@ export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) 
           <div className="grid grid-cols-4 gap-2">
             {[
               {
-                label: 'Paste',
+                label: t('ws.quickPaste'),
                 icon: ClipboardPaste,
                 action: async () => {
                   const result = await readClipboardDirect();
                   if (result.files.length) await addFiles(result.files);
                 },
               },
+              { label: t('ws.quickPhotos'), icon: Camera, action: quickPickImage },
               {
-                label: 'Photos',
-                icon: Camera,
-                action: quickPickImage,
-              },
-              {
-                label: 'Files',
+                label: t('ws.quickFiles'),
                 icon: FilePlus2,
                 action: async () => {
                   const files = await pickFiles();
                   if (files.length) await addFiles(files);
                 },
               },
-              {
-                label: 'Text',
-                icon: Type,
-                action: () => onNavigate('history'),
-              },
+              { label: t('ws.quickText'), icon: Type, action: () => onNavigate('history') },
             ].map((item) => (
               <button
                 key={item.label}
@@ -81,34 +74,28 @@ export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) 
 
         <QueuePanel />
 
-        {devices.length > 0 && queue.length > 0 ? (
-          <DeviceChips />
-        ) : null}
+        {devices.length > 0 && queue.length > 0 ? <DeviceChips /> : null}
 
         <Card>
           <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
             <div className="flex items-center gap-2">
-              <h2 className="text-[13px] font-semibold">Recent transfers</h2>
+              <h2 className="text-[13px] font-semibold">{t('ws.recent')}</h2>
               <Badge>{transfers.length}</Badge>
             </div>
             <button onClick={() => onNavigate('history')} className="inline-flex items-center gap-1 text-[12px] text-muted transition-colors hover:text-fg">
-              View all <ArrowRight className="size-3.5" />
+              {t('ws.viewAll')} <ArrowRight className="size-3.5" />
             </button>
           </div>
           <div className="p-2">
             {recent.length === 0 ? (
               <EmptyState
                 icon={<Sparkles className="size-4" />}
-                title={devices.length === 0 ? 'Pair your first device' : 'Nothing transferred yet'}
-                description={
-                  devices.length === 0
-                    ? 'Pair a phone or a second computer to start moving screenshots and files without a chat app.'
-                    : 'Paste a screenshot or drop a file — your transfers will appear here, stored only on this device.'
-                }
+                title={devices.length === 0 ? t('ws.emptyPairTitle') : t('ws.emptyNothingTitle')}
+                description={devices.length === 0 ? t('ws.emptyPairDesc') : t('ws.emptyNothingDesc')}
                 action={
                   devices.length === 0 ? (
                     <Button size="sm" variant="primary" onClick={onPair}>
-                      <Link2 className="size-3.5" /> Pair a device
+                      <Link2 className="size-3.5" /> {t('rail.pairCta')}
                     </Button>
                   ) : null
                 }
@@ -142,14 +129,12 @@ export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) 
       ) : null}
 
       <motion.div
+        key="tip"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         className="rounded-2xl border border-line bg-surface/40 px-4 py-3 xl:hidden"
-        key="tip"
       >
-        <p className="text-[11.5px] leading-relaxed text-muted">
-          Tip: everything here lives in this browser. Clearing site data removes your history — favorites included.
-        </p>
+        <p className="text-[11.5px] leading-relaxed text-muted">{t('ws.tip')}</p>
       </motion.div>
     </div>
   );

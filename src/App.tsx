@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { decodeInvite, inviteIsExpired, type PairInvite } from './lib/pairing';
 import { ingestClipboardEvent } from './lib/clipboard';
+import { t, useLanguage } from './lib/i18n';
 import { useApp } from './state/app';
 import { MobileNav } from './components/MobileNav';
 import { Sidebar, type ViewKey } from './components/Sidebar';
@@ -12,12 +13,12 @@ import { History } from './views/History';
 import { Devices } from './views/Devices';
 import { Settings } from './views/Settings';
 
-const VIEWS: Record<ViewKey, { title: string; subtitle: string }> = {
-  workspace: { title: 'Workspace', subtitle: 'Your Personal Transfer Space.' },
-  history: { title: 'Recent transfers', subtitle: 'Everything that moved, stored on this device only.' },
-  favorites: { title: 'Favorites', subtitle: 'Pinned transfers that survive the retention limit.' },
-  devices: { title: 'My devices', subtitle: 'Pair, verify and manage trusted devices.' },
-  settings: { title: 'Settings', subtitle: 'Theme, storage, relay and privacy.' },
+const VIEW_META: Record<ViewKey, { title: string; subtitle: string }> = {
+  workspace: { title: 'view.workspace.title', subtitle: 'view.workspace.sub' },
+  history: { title: 'view.history.title', subtitle: 'view.history.sub' },
+  favorites: { title: 'view.favorites.title', subtitle: 'view.favorites.sub' },
+  devices: { title: 'view.devices.title', subtitle: 'view.devices.sub' },
+  settings: { title: 'view.settings.title', subtitle: 'view.settings.sub' },
 };
 
 const VALID_VIEWS: ViewKey[] = ['workspace', 'history', 'favorites', 'devices', 'settings'];
@@ -35,6 +36,7 @@ function parseRoute(): { view: ViewKey; invite?: PairInvite } {
 export default function App() {
   const { ready, addFiles, devices } = useApp();
   const toasts = useToasts();
+  useLanguage();
   const [route, setRoute] = useState(() => parseRoute());
   const [pairing, setPairing] = useState<{ open: boolean; invite?: PairInvite | null }>({ open: false });
 
@@ -67,8 +69,8 @@ export default function App() {
         void addFiles(result.files).then(() => {
           toasts.push({
             tone: 'success',
-            title: `${result.files.length} image${result.files.length > 1 ? 's' : ''} staged`,
-            body: devices.length ? 'Pick a device and hit send.' : 'Pair a device to send it.',
+            title: result.files.length > 1 ? t('toast.stagedMany', { n: result.files.length }) : t('toast.stagedOne'),
+            body: devices.length ? t('toast.stagedBodyDevices') : t('toast.stagedBodyNoDevice'),
           });
         });
       }
@@ -77,7 +79,7 @@ export default function App() {
     return () => window.removeEventListener('paste', onPaste);
   }, [addFiles, devices.length, toasts]);
 
-  const meta = VIEWS[route.view];
+  const meta = VIEW_META[route.view];
   const content = useMemo(() => {
     switch (route.view) {
       case 'history':
@@ -100,18 +102,14 @@ export default function App() {
       <div className="relative z-10 flex min-h-dvh">
         <Sidebar view={route.view} onNavigate={navigate} />
         <div className="flex min-w-0 flex-1 flex-col lg:pl-[266px]">
-          <TopBar title={meta.title} subtitle={meta.subtitle} onNavigate={(view) => navigate(view)} />
+          <TopBar title={t(meta.title)} subtitle={t(meta.subtitle)} onNavigate={(view) => navigate(view)} />
           <main className="mx-auto w-full max-w-[1440px] flex-1 px-3 pb-28 pt-3 sm:px-6 sm:pt-5 lg:pb-10">
             {!ready ? <BootSkeleton /> : <div key={route.view} className="animate-in-up">{content}</div>}
           </main>
         </div>
       </div>
       <MobileNav view={route.view} onNavigate={navigate} />
-      <PairingDialog
-        open={pairing.open}
-        initialInvite={pairing.invite ?? null}
-        onClose={() => setPairing({ open: false })}
-      />
+      <PairingDialog open={pairing.open} initialInvite={pairing.invite ?? null} onClose={() => setPairing({ open: false })} />
     </div>
   );
 }

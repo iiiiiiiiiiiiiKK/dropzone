@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Clock3, LayoutGrid, Settings, Smartphone, Star, Wifi, WifiOff, Zap } from 'lucide-react';
 import { AUTHOR_X_URL } from '../lib/constants';
+import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import { useApp } from '../state/app';
 import { LogoMark } from './Logo';
@@ -8,12 +9,12 @@ import { StatusDot } from './ui';
 
 export type ViewKey = 'workspace' | 'history' | 'favorites' | 'devices' | 'settings';
 
-const NAV: Array<{ key: ViewKey; label: string; icon: typeof LayoutGrid }> = [
-  { key: 'workspace', label: 'Workspace', icon: LayoutGrid },
-  { key: 'history', label: 'Recent transfers', icon: Clock3 },
-  { key: 'favorites', label: 'Favorites', icon: Star },
-  { key: 'devices', label: 'My devices', icon: Smartphone },
-  { key: 'settings', label: 'Settings', icon: Settings },
+const NAV: Array<{ key: ViewKey; labelKey: string; icon: typeof LayoutGrid }> = [
+  { key: 'workspace', labelKey: 'nav.workspace', icon: LayoutGrid },
+  { key: 'history', labelKey: 'nav.history', icon: Clock3 },
+  { key: 'favorites', labelKey: 'nav.favorites', icon: Star },
+  { key: 'devices', labelKey: 'nav.devices', icon: Smartphone },
+  { key: 'settings', labelKey: 'nav.settings', icon: Settings },
 ];
 
 export function Sidebar({ view, onNavigate }: { view: ViewKey; onNavigate: (view: ViewKey) => void }) {
@@ -21,13 +22,22 @@ export function Sidebar({ view, onNavigate }: { view: ViewKey; onNavigate: (view
   const online = peers.filter((peer) => peer.online).length;
   const relayed = Object.values(paths).filter((path) => path === 'relay').length;
 
+  const stateLabel =
+    relayState === 'online'
+      ? t('status.online')
+      : relayState === 'connecting'
+        ? t('status.connecting')
+        : relayState === 'reconnecting'
+          ? t('status.reconnecting')
+          : t('status.offline');
+
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[266px] flex-col border-r border-line bg-bg-elev/60 px-4 pb-4 pt-5 backdrop-blur-xl lg:flex">
       <div className="flex items-center gap-2.5 px-2">
         <LogoMark />
         <div className="leading-none">
           <p className="text-[14px] font-semibold tracking-[0.16em]">DROPZONE</p>
-          <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.18em] text-muted">Your transfer space</p>
+          <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted">{t('set.aboutHint').replace('DROPZONE — ', '').replace('DROPZONE —— ', '')}</p>
         </div>
       </div>
 
@@ -51,7 +61,7 @@ export function Sidebar({ view, onNavigate }: { view: ViewKey; onNavigate: (view
                 />
               ) : null}
               <item.icon className={cn('relative size-[17px]', active ? 'text-accent' : 'text-muted group-hover:text-fg-soft')} />
-              <span className="relative">{item.label}</span>
+              <span className="relative">{t(item.labelKey)}</span>
               {item.key === 'devices' && devices.length > 0 ? (
                 <span className="relative ml-auto rounded-full bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-fg-soft">{devices.length}</span>
               ) : null}
@@ -63,22 +73,23 @@ export function Sidebar({ view, onNavigate }: { view: ViewKey; onNavigate: (view
       <div className="mt-auto space-y-3">
         <div className="rounded-2xl border border-line bg-surface/60 p-3.5">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Relay</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">{t('top.relay')}</p>
             <StatusDot tone={relayState === 'online' ? 'ok' : relayState === 'connecting' || relayState === 'reconnecting' ? 'warn' : 'err'} pulse={relayState === 'online'} />
           </div>
           <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-fg-soft">
             {relayState === 'online' ? <Wifi className="size-3.5 text-ok" /> : <WifiOff className="size-3.5 text-muted" />}
-            {relayState === 'online' ? 'Signaling connected' : relayState === 'connecting' ? 'Connecting…' : relayState === 'reconnecting' ? 'Reconnecting…' : 'Offline'}
+            {stateLabel}
           </p>
           <p className="mt-1 text-[11.5px] text-muted">
-            {online} of {devices.length} devices online{relayed > 0 ? ` · ${relayed} relayed` : ''}
+            {t('status.devicesOnline', { online, total: devices.length })}
+            {relayed > 0 ? t('status.relayed', { n: relayed }) : ''}
           </p>
         </div>
 
         <div className="flex items-center justify-between rounded-2xl border border-line bg-surface/40 px-3.5 py-2.5">
           <div className="min-w-0">
-            <p className="truncate text-[12.5px] font-medium">{settings.deviceName || 'This device'}</p>
-            <p className="text-[11px] text-muted">Local-first by design</p>
+            <p className="truncate text-[12.5px] font-medium">{settings.deviceName || t('top.device')}</p>
+            <p className="text-[11px] text-muted">{t('status.localFirst')}</p>
           </div>
           <a
             href={AUTHOR_X_URL}

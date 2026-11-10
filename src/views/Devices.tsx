@@ -1,6 +1,7 @@
 import { Check, Edit3, KeyRound, Monitor, QrCode, Send, Shield, Smartphone, Tablet, Unplug, Wifi, WifiOff } from 'lucide-react';
 import { useState } from 'react';
 import { pickFiles } from '../lib/clipboard';
+import { t } from '../lib/i18n';
 import { useApp } from '../state/app';
 import { Badge, Button, Card, Dialog, EmptyState, StatusDot } from '../components/ui';
 import { cn, timeAgo } from '../lib/utils';
@@ -25,20 +26,20 @@ export function Devices({ onPair }: { onPair: () => void }) {
               <Glyph type={settings.deviceType} className="size-5" />
             </div>
             <div>
-              <p className="text-[14px] font-semibold">This device</p>
+              <p className="text-[14px] font-semibold">{t('dev.thisDevice')}</p>
               <p className="mt-0.5 text-[11.5px] text-muted">
-                {identity ? `ID ${identity.deviceId.slice(0, 12)}…` : 'initialising identity…'} · {settings.deviceType}
+                {identity ? t('dev.id', { id: identity.deviceId.slice(0, 12) }) : t('dev.initialising')} · {settings.deviceType}
               </p>
             </div>
           </div>
           <Button variant="primary" onClick={onPair}>
-            <QrCode className="size-4" /> Pair a device
+            <QrCode className="size-4" /> {t('dev.pairDevice')}
           </Button>
         </div>
 
         <div className="grid gap-3 border-t border-line bg-surface-2/30 p-4 sm:grid-cols-2 sm:p-5">
           <label className="space-y-1.5">
-            <span className="text-[11.5px] font-medium text-fg-soft">Device name</span>
+            <span className="text-[11.5px] font-medium text-fg-soft">{t('dev.deviceName')}</span>
             <div className="flex items-center gap-2">
               <input
                 value={name}
@@ -52,7 +53,7 @@ export function Devices({ onPair }: { onPair: () => void }) {
             </div>
           </label>
           <div className="space-y-1.5">
-            <span className="text-[11.5px] font-medium text-fg-soft">Identity key</span>
+            <span className="text-[11.5px] font-medium text-fg-soft">{t('dev.identityKey')}</span>
             <div className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
               <KeyRound className="size-3.5 shrink-0 text-muted" />
               <span className="truncate font-mono text-[11px] text-muted">{identity?.publicKey.slice(0, 44)}…</span>
@@ -63,18 +64,18 @@ export function Devices({ onPair }: { onPair: () => void }) {
 
       <div>
         <div className="mb-2 flex items-center justify-between px-1">
-          <h2 className="text-[13px] font-semibold">Paired devices</h2>
-          <span className="text-[11.5px] text-muted">{devices.length} trusted</span>
+          <h2 className="text-[13px] font-semibold">{t('dev.pairedDevices')}</h2>
+          <span className="text-[11.5px] text-muted">{t('dev.trusted', { n: devices.length })}</span>
         </div>
 
         {devices.length === 0 ? (
           <EmptyState
             icon={<QrCode className="size-4" />}
-            title="No trusted devices yet"
-            description="Pairing creates a one-time code that links two devices. After that, no login is ever required."
+            title={t('dev.emptyTitle')}
+            description={t('dev.emptyDesc')}
             action={
               <Button size="sm" variant="primary" onClick={onPair}>
-                <QrCode className="size-3.5" /> Pair now
+                <QrCode className="size-3.5" /> {t('dev.pairNow')}
               </Button>
             }
           />
@@ -94,25 +95,33 @@ export function Devices({ onPair }: { onPair: () => void }) {
                       <p className="truncate text-[13.5px] font-semibold">{device.name}</p>
                       <p className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-muted">
                         <StatusDot tone={isOnline ? 'ok' : 'muted'} pulse={isOnline} />
-                        {isOnline ? 'Online' : `Last seen ${timeAgo(device.lastSeen)}`}
+                        {isOnline ? t('rail.online') : t('rail.lastSeen', { time: timeAgo(device.lastSeen) })}
                       </p>
                     </div>
                     {verified[device.id] ? (
                       <Badge tone="ok">
-                        <Shield className="size-3" /> verified
+                        <Shield className="size-3" /> {t('dev.verified')}
                       </Badge>
                     ) : null}
                   </div>
 
                   <dl className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-line bg-surface-2/40 p-2.5 text-[11px]">
                     <div>
-                      <dt className="text-muted">Link</dt>
+                      <dt className="text-muted">{t('dev.link')}</dt>
                       <dd className={cn('mt-0.5 font-medium', link === 'connected' ? 'text-ok' : 'text-fg-soft')}>
-                        {link === 'connected' ? (path === 'relay' ? 'TURN relay' : 'P2P direct') : link}
+                        {link === 'connected'
+                          ? path === 'relay'
+                            ? t('rail.linkRelay')
+                            : t('rail.linkDirect')
+                          : link === 'connecting'
+                            ? t('status.connecting')
+                            : link === 'disconnected'
+                              ? t('status.offline')
+                              : t('rail.linkPending')}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted">Safety number</dt>
+                      <dt className="text-muted">{t('dev.safetyNumber')}</dt>
                       <dd className="mt-0.5 font-mono text-[10.5px] text-fg-soft">{device.safetyNumber ?? '—'}</dd>
                     </div>
                   </dl>
@@ -127,10 +136,10 @@ export function Devices({ onPair }: { onPair: () => void }) {
                         if (files.length) await sendFilesTo(device.id, files);
                       }}
                     >
-                      <Send className="size-3.5" /> Send files
+                      <Send className="size-3.5" /> {t('dev.sendFiles')}
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => setConfirming(device.id)} className="text-muted hover:text-err">
-                      <Unplug className="size-3.5" /> Unpair
+                      <Unplug className="size-3.5" /> {t('dev.unpair')}
                     </Button>
                   </div>
                 </Card>
@@ -142,30 +151,30 @@ export function Devices({ onPair }: { onPair: () => void }) {
 
       <Card className="p-4 sm:p-5">
         <p className="flex items-center gap-2 text-[12.5px] font-semibold">
-          <Shield className="size-4 text-accent" /> How trust works here
+          <Shield className="size-4 text-accent" /> {t('dev.trustTitle')}
         </p>
         <ul className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-muted">
-          <li>• Each device generates an ECDSA P-256 key pair; the private key never leaves this browser and cannot be exported.</li>
-          <li>• A pairing code is a single-use secret that expires in five minutes. It is not a long-term key.</li>
-          <li>• Both devices derive the same safety number from their public keys — compare it out loud to rule out a relay swap.</li>
-          <li>• Files are encrypted in transit by DTLS-SRTP on the WebRTC data channel. The relay only brokers connection metadata.</li>
+          <li>• {t('dev.trust1')}</li>
+          <li>• {t('dev.trust2')}</li>
+          <li>• {t('dev.trust3')}</li>
+          <li>• {t('dev.trust4')}</li>
         </ul>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Badge tone={isSecureContext ? 'ok' : 'warn'}>
-            {isSecureContext ? <Wifi className="size-3" /> : <WifiOff className="size-3" />} {isSecureContext ? 'secure context' : 'insecure context — WebRTC still works locally'}
+            {isSecureContext ? <Wifi className="size-3" /> : <WifiOff className="size-3" />} {isSecureContext ? t('dev.secure') : t('dev.insecure')}
           </Badge>
-          <Badge>{peers.length} relay peer{peers.length === 1 ? '' : 's'}</Badge>
+          <Badge>{peers.length === 1 ? t('dev.relayPeers', { n: peers.length }) : t('dev.relayPeersPlural', { n: peers.length })}</Badge>
         </div>
       </Card>
 
       <Dialog
         open={Boolean(confirming)}
         onClose={() => setConfirming(null)}
-        title="Unpair this device?"
-        description="The trust link is removed locally. You can pair again with a fresh QR code."
+        title={t('dev.unpairTitle')}
+        description={t('dev.unpairDesc')}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirming(null)}>Keep</Button>
+            <Button variant="ghost" onClick={() => setConfirming(null)}>{t('dev.keep')}</Button>
             <Button
               variant="danger"
               onClick={async () => {
@@ -173,12 +182,12 @@ export function Devices({ onPair }: { onPair: () => void }) {
                 setConfirming(null);
               }}
             >
-              <Edit3 className="size-4" /> Unpair
+              <Edit3 className="size-4" /> {t('dev.unpair')}
             </Button>
           </>
         }
       >
-        <p className="text-[13px] text-muted">Transfers already stored stay in your local history.</p>
+        <p className="text-[13px] text-muted">{t('dev.unpairBody')}</p>
       </Dialog>
     </div>
   );

@@ -3,6 +3,7 @@ import { Laptop, Link2, Monitor, QrCode, Send, Smartphone, Tablet, Trash2, Unplu
 import { useState } from 'react';
 import type { DeviceRecord } from '../lib/db';
 import { pickFiles } from '../lib/clipboard';
+import { t } from '../lib/i18n';
 import { cn, timeAgo } from '../lib/utils';
 import { useApp } from '../state/app';
 import { Badge, Button, Dialog, EmptyState, StatusDot } from './ui';
@@ -22,23 +23,25 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
     <aside className={cn('flex flex-col gap-3', className)}>
       <div className="flex items-center justify-between px-1">
         <div>
-          <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-muted">My devices</h2>
-          <p className="mt-1 text-[11.5px] text-muted">{devices.length} paired · {devices.filter((device) => onlineById.get(device.id)).length} online</p>
+          <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-muted">{t('rail.title')}</h2>
+          <p className="mt-1 text-[11.5px] text-muted">
+            {t('rail.summary', { paired: devices.length, online: devices.filter((device) => onlineById.get(device.id)).length })}
+          </p>
         </div>
         <Button size="sm" variant="secondary" onClick={onPair}>
           <QrCode className="size-3.5" />
-          Pair
+          {t('rail.pair')}
         </Button>
       </div>
 
       {devices.length === 0 ? (
         <EmptyState
           icon={<Link2 className="size-4" />}
-          title="No devices paired"
-          description="Open DROPZONE on your phone and scan its QR code to create an encrypted pairing."
+          title={t('rail.emptyTitle')}
+          description={t('rail.emptyDesc')}
           action={
             <Button size="sm" variant="primary" onClick={onPair}>
-              <QrCode className="size-3.5" /> Pair a device
+              <QrCode className="size-3.5" /> {t('rail.pairCta')}
             </Button>
           }
         />
@@ -48,11 +51,7 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
             const online = onlineById.get(device.id) ?? false;
             const path = paths[device.id];
             return (
-              <motion.li
-                key={device.id}
-                layout
-                className="rounded-2xl border border-line bg-surface/70 p-3 transition-colors hover:border-line-strong"
-              >
+              <motion.li key={device.id} layout className="rounded-2xl border border-line bg-surface/70 p-3 transition-colors hover:border-line-strong">
                 <div className="flex items-start gap-2.5">
                   <div className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface-2 text-fg-soft">
                     <DeviceGlyph type={device.type} className="size-4" />
@@ -63,8 +62,8 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
                       <StatusDot tone={online ? 'ok' : 'muted'} pulse={online} />
                     </div>
                     <p className="mt-0.5 truncate text-[11px] text-muted">
-                      {online ? 'Online' : `Last seen ${timeAgo(device.lastSeen)}`}
-                      {path ? ` · ${path === 'relay' ? 'TURN relay' : path === 'direct' ? 'P2P direct' : 'linking'}` : ''}
+                      {online ? t('rail.online') : t('rail.lastSeen', { time: timeAgo(device.lastSeen) })}
+                      {path ? ` · ${path === 'relay' ? t('rail.linkRelay') : path === 'direct' ? t('rail.linkDirect') : t('rail.linkPending')}` : ''}
                     </p>
                   </div>
                 </div>
@@ -79,21 +78,19 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
                       if (files.length) await sendFilesTo(device.id, files);
                     }}
                   >
-                    <Send className="size-3.5" /> Send
+                    <Send className="size-3.5" /> {t('rail.send')}
                   </Button>
                   <button
                     onClick={() => setConfirming(device)}
-                    title="Unpair device"
-                    aria-label={`Unpair ${device.name}`}
+                    title={t('rail.unpair')}
+                    aria-label={`${t('rail.unpair')} ${device.name}`}
                     className="grid size-8 place-items-center rounded-lg border border-line text-muted transition-colors hover:border-err/40 hover:text-err"
                   >
                     <Unplug className="size-3.5" />
                   </button>
                 </div>
 
-                {device.safetyNumber ? (
-                  <p className="mt-2 font-mono text-[10px] tracking-[0.12em] text-muted">safety {device.safetyNumber}</p>
-                ) : null}
+                {device.safetyNumber ? <p className="mt-2 font-mono text-[10px] tracking-[0.12em] text-muted">{t('rail.safety', { code: device.safetyNumber })}</p> : null}
               </motion.li>
             );
           })}
@@ -102,21 +99,19 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
 
       <div className="mt-1 rounded-2xl border border-line bg-surface/40 p-3">
         <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-fg-soft">
-          <Wifi className="size-3.5 text-accent" /> Peer-to-peer by default
+          <Wifi className="size-3.5 text-accent" /> {t('rail.blurbTitle')}
         </p>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted">
-          Files move directly between devices. When NAT blocks a direct path, traffic falls back to your own TURN relay — never to a storage bucket.
-        </p>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted">{t('rail.blurb')}</p>
       </div>
 
       <Dialog
         open={Boolean(confirming)}
         onClose={() => setConfirming(null)}
-        title={`Unpair ${confirming?.name ?? 'device'}?`}
-        description="This removes the trust link and history association on this device only. The other device keeps its own copy."
+        title={t('rail.unpairTitle', { name: confirming?.name ?? t('top.device') })}
+        description={t('rail.unpairDesc')}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirming(null)}>Keep device</Button>
+            <Button variant="ghost" onClick={() => setConfirming(null)}>{t('rail.keep')}</Button>
             <Button
               variant="danger"
               onClick={async () => {
@@ -124,13 +119,13 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
                 setConfirming(null);
               }}
             >
-              <Trash2 className="size-4" /> Unpair
+              <Trash2 className="size-4" /> {t('rail.unpairCta')}
             </Button>
           </>
         }
       >
         <p className="text-[13px] leading-relaxed text-muted">
-          You can pair again at any time with a fresh QR code. Safety number:
+          {t('rail.unpairBody')}
           <span className="ml-1 font-mono text-fg-soft">{confirming?.safetyNumber ?? '—'}</span>
         </p>
       </Dialog>
@@ -156,5 +151,9 @@ export function DeviceChips({ className }: { className?: string }) {
 }
 
 export function PairBadge() {
-  return <Badge tone="accent"><Link2 className="size-3" /> encrypted</Badge>;
+  return (
+    <Badge tone="accent">
+      <Link2 className="size-3" /> encrypted
+    </Badge>
+  );
 }

@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 
 export function LogoMark({ className }: { className?: string }) {
@@ -30,7 +31,7 @@ export function Wordmark({ className }: { className?: string }) {
       <LogoMark />
       <div className="leading-none">
         <p className="text-[15px] font-semibold tracking-[0.14em] text-fg">DROPZONE</p>
-        <p className="mt-1 text-[10px] font-medium tracking-[0.18em] text-muted uppercase">Transfer space</p>
+        <p className="mt-1 text-[10px] font-medium tracking-[0.18em] text-muted uppercase">{t('brand.tagline')}</p>
       </div>
     </div>
   );

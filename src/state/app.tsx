@@ -30,6 +30,7 @@ import { RelayClient, type PeerInfo, type RelayIce, type RelayState } from '../l
 import { TransferEngine, type TransferProgress } from '../lib/transfer';
 import { buildPreview } from '../lib/clipboard';
 import { useToasts } from '../components/Toasts';
+import { setLanguage, t } from '../lib/i18n';
 import { isImageMime, randomId } from '../lib/utils';
 import { useTheme } from '../lib/theme';
 
@@ -163,6 +164,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const [deviceList, transferList] = await Promise.all([listDevices(), recentTransfers(loadedSettings.historyLimit)]);
       const textList = await db.texts.orderBy('createdAt').reverse().limit(50).toArray();
       if (cancelled) return;
+      setLanguage(loadedSettings.language === 'zh' ? 'zh' : 'en');
       setIdentity(nextIdentity);
       setSettings(loadedSettings);
       setDevices(deviceList);
@@ -182,6 +184,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [settings.theme, ready, theme, setTheme]);
 
   const updateSettings = useCallback(async (patch: Partial<AppSettings>) => {
+    if (patch.language) setLanguage(patch.language);
     setSettings((current) => {
       const next = { ...current, ...patch };
       void saveSettings(next);
@@ -242,7 +245,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
         onPath: (deviceId, path) => setPaths((current) => ({ ...current, [deviceId]: path })),
         onError: (deviceId, message) => {
-          toasts.push({ tone: 'error', title: 'Connection error', body: message });
+          toasts.push({ tone: 'error', title: t('notice.error'), body: message });
           setLinkStates((current) => ({ ...current, [deviceId]: 'failed' }));
         },
       },
@@ -319,14 +322,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onPaired: (peer) => {
           pairTokenRef.current = undefined;
           void refreshDevicesRef.current(peer);
-          toasts.push({ tone: 'success', title: `Paired with ${peer.name}`, body: 'Confirm the safety number on both devices.' });
+          toasts.push({ tone: 'success', title: t('toast.pairedTitle', { name: peer.name }), body: t('toast.pairedBody') });
         },
         onSignal: (from, data) => {
           void meshRef.current?.handleSignal(from, data);
         },
         onError: (code, message) => {
           if (['pair_unknown', 'pair_expired', 'pair_used', 'pair_self', 'not_paired'].includes(code)) {
-            toasts.push({ tone: 'warn', title: 'Pairing problem', body: message });
+            toasts.push({ tone: 'warn', title: t('toast.pairProblem'), body: message });
           }
         },
       },
@@ -400,7 +403,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (deviceId: string) => {
       const items = queue;
       if (!deviceId) {
-        toasts.push({ tone: 'warn', title: 'No device selected', body: 'Pair a device first — scan its QR code from Devices.' });
+        toasts.push({ tone: 'warn', title: t('toast.noDeviceTitle'), body: t('toast.noDeviceBody') });
         return;
       }
       if (items.length === 0) return;
@@ -417,12 +420,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const sendFilesTo = useCallback(
     async (deviceId: string, files: File[]) => {
       if (!deviceId) {
-        toasts.push({ tone: 'warn', title: 'No device selected', body: 'Pair a device first — scan its QR code from Devices.' });
+        toasts.push({ tone: 'warn', title: t('toast.noDeviceTitle'), body: t('toast.noDeviceBody') });
         return;
       }
       if (files.length === 0) return;
       const online = await waitForRelay();
-      if (!online) toasts.push({ tone: 'warn', title: 'Relay offline', body: 'Reconnect the signaling relay before sending.' });
+      if (!online) toasts.push({ tone: 'warn', title: t('toast.relayOfflineTitle'), body: t('toast.relayOfflineBody') });
       await engineRef.current?.sendFiles(deviceId, files);
     },
     [toasts, waitForRelay],
@@ -431,14 +434,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const sendTextTo = useCallback(
     async (deviceId: string, body: string) => {
       if (!deviceId) {
-        toasts.push({ tone: 'warn', title: 'No device selected', body: 'Pair a device first — scan its QR code from Devices.' });
+        toasts.push({ tone: 'warn', title: t('toast.noDeviceTitle'), body: t('toast.noDeviceBody') });
         return;
       }
       try {
         await engineRef.current?.sendText(deviceId, body);
-        toasts.push({ tone: 'success', title: 'Text sent' });
+        toasts.push({ tone: 'success', title: t('toast.textSent') });
       } catch (error) {
-        toasts.push({ tone: 'error', title: 'Text not sent', body: (error as Error).message });
+        toasts.push({ tone: 'error', title: t('toast.textFailed'), body: (error as Error).message });
       }
     },
     [toasts],
@@ -476,7 +479,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await upsertDevice(record);
       await refreshDevices();
       setSession((current) => ({ key: current.key + 1, pairToken: invite.token }));
-      toasts.push({ tone: 'info', title: `Pairing with ${invite.name}`, body: 'Hold both devices until the pairing completes.' });
+      toasts.push({ tone: 'info', title: t('toast.pairing', { name: invite.name }), body: t('toast.pairingBody') });
     },
     [refreshDevices, toasts],
   );
@@ -486,7 +489,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await removeDevice(deviceId);
       meshRef.current?.close(deviceId);
       await refreshDevices();
-      toasts.push({ tone: 'info', title: 'Device unpaired', body: 'The pairing link was removed on this device.' });
+      toasts.push({ tone: 'info', title: t('toast.unpaired'), body: t('toast.unpairedBody') });
     },
     [refreshDevices, toasts],
   );
@@ -524,12 +527,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTransfers([]);
     setTexts([]);
     setProgress({});
-    toasts.push({ tone: 'info', title: 'Local history cleared' });
+    toasts.push({ tone: 'info', title: t('toast.cleared') });
   }, [toasts]);
 
   const cancelTransfer = useCallback((id: string) => {
     engineRef.current?.cancel(id);
-    toasts.push({ tone: 'info', title: 'Transfer canceled' });
+    toasts.push({ tone: 'info', title: t('toast.canceled') });
   }, [toasts]);
 
   const value = useMemo<AppContextValue>(

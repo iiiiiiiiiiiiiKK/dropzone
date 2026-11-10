@@ -2,6 +2,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { CHUNK_SIZE } from './constants';
 import { db, saveFile, type TextRecord, type TransferRecord } from './db';
 import { newNonce, sign, verify, type Identity } from './device';
+import { t } from './i18n';
 import { FRAME, decodeChunkFrame, decodeFrame, decodeJsonFrame, encodeChunkFrame, encodeJsonFrame } from './frame';
 import type { PeerMesh } from './peer';
 import { trace } from './log';
@@ -238,7 +239,7 @@ export class TransferEngine {
           favorite: 0,
         });
         this.options.events.onText(record);
-        this.options.events.onNotice({ level: 'info', title: `Text from ${deviceName}`, body: record.content.slice(0, 120) });
+        this.options.events.onNotice({ level: 'info', title: t('notice.text', { name: deviceName }), body: record.content.slice(0, 120) });
         return;
       }
       case FRAME.PING:
@@ -266,7 +267,7 @@ export class TransferEngine {
     const deviceName = this.options.events.resolveDeviceName(deviceId);
     if (!this.options.events.autoAccept()) {
       this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.REJECT, { transferId: meta.transferId, reason: 'declined' }));
-      this.options.events.onNotice({ level: 'warn', title: 'Incoming transfer declined', body: 'Auto-receive is disabled in Settings.' });
+      this.options.events.onNotice({ level: 'warn', title: t('notice.declined'), body: t('notice.declinedBody') });
       return;
     }
     const state: IncomingState = {
@@ -300,7 +301,7 @@ export class TransferEngine {
     await db.transfers.put(record);
     this.options.events.onRecord(record);
     this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.ACCEPT, { transferId: meta.transferId, offset: 0 }));
-    this.options.events.onNotice({ level: 'info', title: `Incoming from ${deviceName}`, body: state.name });
+    this.options.events.onNotice({ level: 'info', title: t('notice.incoming', { name: deviceName }), body: state.name });
   }
 
   private async handleChunk(payload: Uint8Array): Promise<void> {
@@ -354,10 +355,10 @@ export class TransferEngine {
         sha256: digest,
         thumbnail: state.mime.startsWith('image/') ? blob.slice(0, Math.min(blob.size, 512 * 1024)) : undefined,
       });
-      this.options.events.onNotice({ level: 'success', title: 'Transfer complete', body: state.name });
+      this.options.events.onNotice({ level: 'success', title: t('notice.complete'), body: state.name });
     } else {
       await db.transfers.update(control.transferId, { status: 'failed', error: `Checksum mismatch (${blob.size}/${state.size} bytes)` });
-      this.options.events.onNotice({ level: 'error', title: 'Checksum mismatch', body: `${state.name} did not survive verification` });
+      this.options.events.onNotice({ level: 'error', title: t('notice.mismatch'), body: t('notice.mismatchBody', { name: state.name }) });
     }
     this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.VERIFY, { transferId: control.transferId, ok, sha256: digest }));
     const result = await db.transfers.get(control.transferId);
@@ -516,7 +517,7 @@ export class TransferEngine {
       this.emitProgress({ id, deviceId, name, size: file.size, transferred: file.size, speed: 0, etaSec: 0, phase: ok ? 'done' : 'failed', direction: 'out' });
       this.options.events.onNotice({
         level: ok ? 'success' : 'error',
-        title: ok ? `Sent to ${deviceName}` : 'Transfer failed verification',
+        title: ok ? t('notice.sent', { name: deviceName }) : t('notice.sendFailed'),
         body: name,
       });
     } catch (error) {
@@ -527,7 +528,7 @@ export class TransferEngine {
       if (failedRecord) this.options.events.onRecord(failedRecord);
       this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.CANCEL, { transferId: id, reason: message }));
       this.emitProgress({ id, deviceId, name, size: file.size, transferred: 0, speed: 0, etaSec: null, phase: 'failed', direction: 'out' });
-      if (status === 'failed') this.options.events.onNotice({ level: 'error', title: 'Transfer failed', body: message });
+      if (status === 'failed') this.options.events.onNotice({ level: 'error', title: t('notice.failed'), body: message });
     } finally {
       this.pending.delete(id);
       this.cancelled.delete(id);

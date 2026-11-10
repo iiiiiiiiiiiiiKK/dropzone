@@ -1,6 +1,7 @@
-import { ArrowUpRight, Monitor, Moon, RefreshCw, Smartphone, Sun, Tablet } from 'lucide-react';
+import { ArrowUpRight, Languages, Monitor, Moon, RefreshCw, Smartphone, Sun, Tablet } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { AUTHOR_X_URL } from '../lib/constants';
+import { setLanguage, t, useLanguage } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import { useApp } from '../state/app';
 import { LogoMark } from './Logo';
@@ -17,7 +18,7 @@ export function XBadge({ className }: { className?: string }) {
       href={AUTHOR_X_URL}
       target="_blank"
       rel="noreferrer noopener"
-      title="Author on X — @0xkillcoin"
+      title={t('top.author')}
       className={cn(
         'group inline-flex h-9 items-center gap-1.5 rounded-xl border border-line bg-surface/70 px-2.5 text-[12.5px] font-medium text-fg-soft transition-all hover:border-accent-line hover:bg-surface-2 hover:text-fg',
         className,
@@ -43,8 +44,20 @@ export function TopBar({
   onNavigate?: (view: 'devices' | 'settings') => void;
   actions?: ReactNode;
 }) {
-  const { settings, theme, setTheme, relayState, deviceType, reconnectRelay, peers } = useApp();
+  const { settings, theme, setTheme, relayState, deviceType, reconnectRelay, peers, updateSettings } = useApp();
+  const lang = useLanguage();
   const online = peers.filter((peer) => peer.online).length;
+
+  const relayLabel =
+    relayState === 'online'
+      ? t('top.relay')
+      : relayState === 'connecting'
+        ? t('status.connecting')
+        : relayState === 'reconnecting'
+          ? t('status.reconnecting')
+          : relayState === 'error'
+            ? t('status.error')
+            : t('status.offline');
 
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-line bg-bg/75 backdrop-blur-xl">
@@ -64,20 +77,20 @@ export function TopBar({
             className="hidden items-center gap-2 rounded-xl border border-line bg-surface/70 px-2.5 py-1.5 text-[12.5px] text-fg-soft transition-colors hover:bg-surface-2 hover:text-fg sm:inline-flex"
           >
             <DeviceIcon type={deviceType} className="size-3.5 text-muted" />
-            <span className="max-w-[150px] truncate">{settings.deviceName || 'This device'}</span>
+            <span className="max-w-[150px] truncate">{settings.deviceName || t('top.device')}</span>
             <span className="h-3 w-px bg-line-strong" />
             <StatusDot tone={online > 0 ? 'ok' : 'muted'} />
-            <span className="tabular-nums">{online} online</span>
+            <span className="tabular-nums">{t('top.online', { n: online })}</span>
           </button>
 
           <button
             onClick={reconnectRelay}
-            title={relayState === 'online' ? 'Relay connected' : 'Reconnect relay'}
-            aria-label="Reconnect relay"
+            title={relayState === 'online' ? t('status.online') : t('top.reconnect')}
+            aria-label={t('top.reconnect')}
             className="hidden items-center gap-1.5 rounded-xl border border-line bg-surface/70 px-2.5 py-1.5 text-[12px] text-muted transition-colors hover:bg-surface-2 hover:text-fg md:inline-flex"
           >
             <StatusDot tone={relayState === 'online' ? 'ok' : relayState === 'connecting' || relayState === 'reconnecting' ? 'warn' : 'err'} pulse={relayState === 'online'} />
-            <span className="capitalize">{relayState === 'online' ? 'Relay' : relayState}</span>
+            <span>{relayLabel}</span>
             <RefreshCw className="size-3 opacity-50" />
           </button>
 
@@ -85,7 +98,20 @@ export function TopBar({
 
           <XBadge className="hidden sm:inline-flex" />
 
-          <IconButton label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          <IconButton
+            label={t('top.lang')}
+            onClick={() => {
+              const next = lang === 'zh' ? 'en' : 'zh';
+              setLanguage(next);
+              void updateSettings({ language: next });
+            }}
+            className="gap-1 px-2.5 text-[12px] font-medium"
+          >
+            <Languages className="size-4" />
+            <span className="hidden tabular-nums sm:inline">{lang === 'zh' ? 'EN' : '中文'}</span>
+          </IconButton>
+
+          <IconButton label={theme === 'dark' ? t('top.themeLight') : t('top.themeDark')} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </IconButton>
         </div>

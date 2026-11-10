@@ -1,26 +1,16 @@
 import { motion } from 'framer-motion';
-import {
-  Bell,
-  Download,
-  HardDrive,
-  Info,
-  Moon,
-  Radio,
-  RefreshCw,
-  Save,
-  ShieldCheck,
-  Sun,
-  Trash2,
-} from 'lucide-react';
+import { Bell, Download, HardDrive, Info, Languages, Moon, Radio, RefreshCw, Save, ShieldCheck, Sun, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { APP_VERSION, AUTHOR_X_URL, REPO_URL } from '../lib/constants';
 import { exportSnapshot, requestPersistentStorage, storageUsage } from '../lib/db';
+import { setLanguage, t, useLanguage } from '../lib/i18n';
 import { downloadBlob, formatBytes } from '../lib/utils';
 import { useApp } from '../state/app';
 import { Badge, Button, Card, Dialog, ProgressBar, Switch } from '../components/ui';
 
 export function Settings() {
   const { settings, updateSettings, theme, setTheme, signalUrl, relayState, turnConfigured, devices, transfers, clearHistory, reconnectRelay } = useApp();
+  const lang = useLanguage();
   const [usage, setUsage] = useState<{ usage: number; quota: number; persisted: boolean }>({ usage: 0, quota: 0, persisted: false });
   const [signal, setSignal] = useState(settings.signalUrlOverride);
   const [notifyState, setNotifyState] = useState<NotificationPermission>('default');
@@ -34,7 +24,7 @@ export function Settings() {
   return (
     <div className="space-y-4 pb-6">
       <Card className="p-4 sm:p-5">
-        <SectionTitle icon={<Sun className="size-4" />} title="Appearance" hint="Dark is the default. Your choice is stored locally." />
+        <SectionTitle icon={<Sun className="size-4" />} title={t('set.appearance')} hint={t('set.appearanceHint')} />
         <div className="mt-3 grid grid-cols-2 gap-2 sm:max-w-sm">
           {(['dark', 'light'] as const).map((mode) => (
             <button
@@ -43,27 +33,56 @@ export function Settings() {
                 setTheme(mode);
                 void updateSettings({ theme: mode });
               }}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] font-medium capitalize transition-colors ${
+              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] font-medium transition-colors ${
                 theme === mode ? 'border-accent-line bg-accent-soft text-fg' : 'border-line bg-surface-2/50 text-muted hover:text-fg'
               }`}
             >
               {mode === 'dark' ? <Moon className="size-4" /> : <Sun className="size-4" />}
-              {mode}
+              {t(mode === 'dark' ? 'set.dark' : 'set.light')}
             </button>
           ))}
+        </div>
+
+        <div className="mt-4 border-t border-line pt-3.5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-1.5 text-[12.5px] font-medium">
+                <Languages className="size-3.5 text-accent" /> {t('set.language')}
+              </p>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted">{t('set.languageHint')}</p>
+            </div>
+            <div className="flex shrink-0 overflow-hidden rounded-lg border border-line">
+              {(
+                [
+                  { key: 'en', label: 'English' },
+                  { key: 'zh', label: '简体中文' },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.key}
+                  onClick={() => {
+                    setLanguage(option.key);
+                    void updateSettings({ language: option.key });
+                  }}
+                  className={`px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+                    lang === option.key ? 'bg-accent-soft text-accent' : 'text-muted hover:text-fg'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </Card>
 
       <Card className="p-4 sm:p-5">
-        <SectionTitle icon={<Radio className="size-4" />} title="Transfer behaviour" hint="How incoming content is handled on this device." />
+        <SectionTitle icon={<Radio className="size-4" />} title={t('set.behaviour')} hint={t('set.behaviourHint')} />
         <div className="mt-3 divide-y divide-[color:var(--line)]">
-          <Row
-            title="Auto-receive files"
-            description="Accept transfers from paired devices without a prompt. Turn off to approve every incoming file."
-          >
-            <Switch checked={settings.autoReceive} onChange={(next) => void updateSettings({ autoReceive: next })} label="Auto receive" />
+          <Row title={t('set.autoReceive')} description={t('set.autoReceiveDesc')}>
+            <Switch checked={settings.autoReceive} onChange={(next) => void updateSettings({ autoReceive: next })} label={t('set.autoReceive')} />
           </Row>
-          <Row title="Desktop notifications" description="Show a system notification when a transfer completes in the background.">
+          <Row title={t('set.notifications')} description={t('set.notificationsDesc')}>
             <div className="flex items-center gap-2">
               {notifyState !== 'granted' ? (
                 <Button
@@ -75,18 +94,18 @@ export function Settings() {
                     await updateSettings({ notifications: permission === 'granted' });
                   }}
                 >
-                  <Bell className="size-3.5" /> Allow
+                  <Bell className="size-3.5" /> {t('set.allow')}
                 </Button>
               ) : null}
               <Switch
                 checked={settings.notifications && notifyState === 'granted'}
                 disabled={notifyState !== 'granted'}
                 onChange={(next) => void updateSettings({ notifications: next })}
-                label="Notifications"
+                label={t('set.notifications')}
               />
             </div>
           </Row>
-          <Row title="History retention" description="Favorites are always kept. Older records beyond this limit are pruned automatically.">
+          <Row title={t('set.retention')} description={t('set.retentionDesc')}>
             <select
               value={settings.historyLimit}
               onChange={(event) => void updateSettings({ historyLimit: Number(event.target.value) })}
@@ -94,7 +113,7 @@ export function Settings() {
             >
               {[25, 50, 100, 250, 500].map((value) => (
                 <option key={value} value={value}>
-                  {value} records
+                  {t('set.records', { n: value })}
                 </option>
               ))}
             </select>
@@ -103,18 +122,20 @@ export function Settings() {
       </Card>
 
       <Card className="p-4 sm:p-5">
-        <SectionTitle icon={<Radio className="size-4" />} title="Signaling relay" hint="The relay only brokers connection metadata; file bytes never touch it." />
+        <SectionTitle icon={<Radio className="size-4" />} title={t('set.relay')} hint={t('set.relayHint')} />
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={relayState === 'online' ? 'ok' : 'err'}>{relayState}</Badge>
-            <Badge tone={turnConfigured ? 'ok' : 'warn'}>{turnConfigured ? 'TURN relay available' : 'STUN only'}</Badge>
-            <Badge>{devices.length} paired</Badge>
+            <Badge tone={relayState === 'online' ? 'ok' : 'err'}>
+              {relayState === 'online' ? t('status.online') : relayState === 'connecting' ? t('status.connecting') : relayState === 'reconnecting' ? t('status.reconnecting') : t('status.offline')}
+            </Badge>
+            <Badge tone={turnConfigured ? 'ok' : 'warn'}>{turnConfigured ? t('set.turnAvailable') : t('set.stunOnly')}</Badge>
+            <Badge>{t('set.pairedCount', { n: devices.length })}</Badge>
             <Button size="sm" variant="ghost" onClick={reconnectRelay}>
-              <RefreshCw className="size-3.5" /> Reconnect
+              <RefreshCw className="size-3.5" /> {t('set.reconnect')}
             </Button>
           </div>
           <label className="block space-y-1.5">
-            <span className="text-[11.5px] font-medium text-fg-soft">Relay endpoint override</span>
+            <span className="text-[11.5px] font-medium text-fg-soft">{t('set.endpoint')}</span>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 value={signal}
@@ -130,21 +151,21 @@ export function Settings() {
                   reconnectRelay();
                 }}
               >
-                <Save className="size-3.5" /> Apply
+                <Save className="size-3.5" /> {t('set.apply')}
               </Button>
             </div>
-            <span className="text-[11px] text-muted">Empty = use the endpoint baked into this deployment.</span>
+            <span className="text-[11px] text-muted">{t('set.endpointHint')}</span>
           </label>
         </div>
       </Card>
 
       <Card className="p-4 sm:p-5">
-        <SectionTitle icon={<HardDrive className="size-4" />} title="Local storage" hint="Everything DROPZONE keeps lives in this browser profile." />
+        <SectionTitle icon={<HardDrive className="size-4" />} title={t('set.storage')} hint={t('set.storageHint')} />
         <div className="mt-3 space-y-3">
           <div>
             <div className="flex items-center justify-between text-[12px] text-muted">
-              <span>{formatBytes(usage.usage)} used</span>
-              <span>{usage.quota ? `of ${formatBytes(usage.quota)} available` : 'quota unknown'}</span>
+              <span>{t('set.used', { size: formatBytes(usage.usage) })}</span>
+              <span>{usage.quota ? t('set.ofQuota', { size: formatBytes(usage.quota) }) : t('set.quotaUnknown')}</span>
             </div>
             <ProgressBar value={usage.quota ? usage.usage / usage.quota : 0} className="mt-2" />
           </div>
@@ -155,10 +176,10 @@ export function Settings() {
               onClick={async () => {
                 const granted = await requestPersistentStorage();
                 setUsage(await storageUsage());
-                if (!granted) alert('The browser did not grant persistent storage. Data may be evicted under pressure.');
+                if (!granted) alert(t('toast.storageDenied'));
               }}
             >
-              <ShieldCheck className="size-3.5" /> {usage.persisted ? 'Storage is persistent' : 'Request persistence'}
+              <ShieldCheck className="size-3.5" /> {usage.persisted ? t('set.persist') : t('set.requestPersist')}
             </Button>
             <Button
               size="sm"
@@ -168,50 +189,51 @@ export function Settings() {
                 downloadBlob(new Blob([snapshot], { type: 'application/json' }), `dropzone-export-${new Date().toISOString().slice(0, 10)}.json`);
               }}
             >
-              <Download className="size-3.5" /> Export data
+              <Download className="size-3.5" /> {t('set.export')}
             </Button>
             <Button size="sm" variant="danger" onClick={() => setConfirmClear(true)}>
-              <Trash2 className="size-3.5" /> Clear history
+              <Trash2 className="size-3.5" /> {t('set.clearHistory')}
             </Button>
           </div>
-          <p className="text-[11px] leading-relaxed text-muted">
-            Export contains device records, transfer metadata and received text — never private keys.
-          </p>
+          <p className="text-[11px] leading-relaxed text-muted">{t('set.exportNote')}</p>
         </div>
       </Card>
 
       <Card className="p-4 sm:p-5">
-        <SectionTitle icon={<Info className="size-4" />} title="About" hint="DROPZONE — Your Personal Transfer Space." />
+        <SectionTitle icon={<Info className="size-4" />} title={t('set.about')} hint={t('set.aboutHint')} />
         <div className="mt-3 grid gap-2 text-[12.5px] text-muted sm:grid-cols-2">
-          <p>Version <span className="font-mono text-fg-soft">{APP_VERSION}</span></p>
-          <p>License <span className="font-mono text-fg-soft">MIT</span></p>
           <p>
-            Source{' '}
+            {t('set.version')} <span className="font-mono text-fg-soft">{APP_VERSION}</span>
+          </p>
+          <p>
+            {t('set.license')} <span className="font-mono text-fg-soft">MIT</span>
+          </p>
+          <p>
+            {t('set.source')}{' '}
             <a className="text-accent hover:underline" href={REPO_URL} target="_blank" rel="noreferrer noopener">
               github.com/iiiiiiiiiiiiiKK/dropzone
             </a>
           </p>
           <p>
-            Author{' '}
+            {t('set.author')}{' '}
             <a className="text-accent hover:underline" href={AUTHOR_X_URL} target="_blank" rel="noreferrer noopener">
               𝕏 @0xkillcoin
             </a>
           </p>
         </div>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3 rounded-xl border border-line bg-surface-2/40 px-3 py-2 text-[11.5px] leading-relaxed text-muted">
-          No accounts, no analytics, no cloud storage. The signaling relay sees device IDs, display names and SDP/ICE metadata —
-          never file names, file contents or clipboard text.
+          {t('set.privacyNote')}
         </motion.p>
       </Card>
 
       <Dialog
         open={confirmClear}
         onClose={() => setConfirmClear(false)}
-        title="Delete local history?"
-        description="Transfers, cached file blobs and received text will be removed from this browser. This cannot be undone."
+        title={t('set.clearTitle')}
+        description={t('set.clearDesc')}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirmClear(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setConfirmClear(false)}>{t('dev.keep')}</Button>
             <Button
               variant="danger"
               onClick={async () => {
@@ -220,12 +242,12 @@ export function Settings() {
                 setUsage(await storageUsage());
               }}
             >
-              <Trash2 className="size-4" /> Delete everything
+              <Trash2 className="size-4" /> {t('set.delete')}
             </Button>
           </>
         }
       >
-        <p className="text-[13px] text-muted">{transfers.length} transfer records and {devices.length} device links will stay, only the transfer data is removed.</p>
+        <p className="text-[13px] text-muted">{t('set.clearBody', { n: transfers.length, m: devices.length })}</p>
       </Dialog>
     </div>
   );

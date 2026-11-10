@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, Info, TriangleAlert, XCircle, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 
 export type ToastTone = 'info' | 'success' | 'warn' | 'error';
@@ -70,7 +71,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 </div>
                 <button
                   onClick={() => remove(toast.id)}
-                  aria-label="Dismiss notification"
+                  aria-label={t('common.dismiss')}
                   className="rounded-md p-1 text-muted transition-colors hover:bg-surface-2 hover:text-fg"
                 >
                   <X className="size-3.5" />

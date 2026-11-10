@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { ArrowDownLeft, Clock3, Search, Star, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { t } from '../lib/i18n';
 import { useApp } from '../state/app';
 import { TransferRow } from '../components/TransferRow';
 import { Badge, Button, Card, Dialog, EmptyState } from '../components/ui';
@@ -8,11 +9,11 @@ import { cn } from '../lib/utils';
 
 type Filter = 'all' | 'files' | 'text' | 'favorites';
 
-const FILTERS: Array<{ key: Filter; label: string }> = [
-  { key: 'all', label: 'All' },
-  { key: 'files', label: 'Files' },
-  { key: 'text', label: 'Text' },
-  { key: 'favorites', label: 'Favorites' },
+const FILTERS: Array<{ key: Filter; labelKey: string }> = [
+  { key: 'all', labelKey: 'hist.all' },
+  { key: 'files', labelKey: 'hist.files' },
+  { key: 'text', labelKey: 'hist.text' },
+  { key: 'favorites', labelKey: 'hist.favorites' },
 ];
 
 export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) {
@@ -43,7 +44,7 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by file name or device"
+              placeholder={t('hist.search')}
               className="w-full bg-transparent text-[13px] outline-none placeholder:text-muted"
             />
           </div>
@@ -58,12 +59,12 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
                       active === item.key ? 'bg-surface-3 text-fg' : 'text-muted hover:text-fg',
                     )}
                   >
-                    {item.label}
+                    {t(item.labelKey)}
                   </button>
                 ))
               : null}
             <Button size="sm" variant="ghost" onClick={() => setConfirmClear(true)} className="text-muted hover:text-err">
-              <Trash2 className="size-3.5" /> Clear
+              <Trash2 className="size-3.5" /> {t('hist.clear')}
             </Button>
           </div>
         </div>
@@ -73,12 +74,8 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
         {rows.length === 0 ? (
           <EmptyState
             icon={favoritesOnly ? <Star className="size-4" /> : <Clock3 className="size-4" />}
-            title={favoritesOnly ? 'No favorites yet' : 'No transfers yet'}
-            description={
-              favoritesOnly
-                ? 'Star a transfer to keep it pinned regardless of the retention limit.'
-                : 'Paste a screenshot, drop a file, or send text — everything shows up here and stays on this device.'
-            }
+            title={favoritesOnly ? t('hist.emptyFavTitle') : t('hist.emptyTitle')}
+            description={favoritesOnly ? t('hist.emptyFavDesc') : t('hist.emptyDesc')}
           />
         ) : (
           <ul className="space-y-0.5">
@@ -98,17 +95,17 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
 
       <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-1 text-[11.5px] leading-relaxed text-muted">
         <ArrowDownLeft className="mr-1 inline size-3" />
-        History is local-only. It never syncs to other devices and is not uploaded anywhere.
+        {t('hist.localNote')}
       </motion.p>
 
       <Dialog
         open={confirmClear}
         onClose={() => setConfirmClear(false)}
-        title="Clear all local history?"
-        description="Transfers, cached files and received text will be deleted from this browser. This cannot be undone."
+        title={t('hist.clearTitle')}
+        description={t('hist.clearDesc')}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirmClear(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setConfirmClear(false)}>{t('common.cancel')}</Button>
             <Button
               variant="danger"
               onClick={async () => {
@@ -116,14 +113,14 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
                 setConfirmClear(false);
               }}
             >
-              <Trash2 className="size-4" /> Delete everything
+              <Trash2 className="size-4" /> {t('hist.deleteEverything')}
             </Button>
           </>
         }
       >
         <div className="flex items-center gap-2 text-[13px] text-muted">
-          <Badge tone="warn">{transfers.length} records</Badge>
-          <span>cached files and thumbnails included</span>
+          <Badge tone="warn">{t('hist.records', { n: transfers.length })}</Badge>
+          <span>{t('hist.clearBodyExtra')}</span>
         </div>
       </Dialog>
     </div>

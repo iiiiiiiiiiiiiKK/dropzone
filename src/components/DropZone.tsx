@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { ClipboardPaste, FilePlus2, Image as ImageIcon, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { pickFiles, readClipboardDirect } from '../lib/clipboard';
+import { t } from '../lib/i18n';
 import { cn, formatBytes } from '../lib/utils';
 import { useApp } from '../state/app';
 import { Badge, Button, Kbd } from './ui';
@@ -79,10 +80,7 @@ export function DropZone({ onPasteHint }: { onPasteHint?: () => void }) {
       )}
     >
       <div
-        className={cn(
-          'pointer-events-none absolute inset-0 opacity-60 transition-opacity duration-500',
-          dragging ? 'opacity-100' : 'opacity-40',
-        )}
+        className={cn('pointer-events-none absolute inset-0 transition-opacity duration-500', dragging ? 'opacity-100' : 'opacity-40')}
         style={{ background: 'radial-gradient(600px 240px at 50% -20%, var(--accent-soft), transparent 70%)' }}
       />
       <div className="relative flex flex-col items-center gap-4 py-6 text-center sm:py-10">
@@ -105,21 +103,19 @@ export function DropZone({ onPasteHint }: { onPasteHint?: () => void }) {
 
         <div className="space-y-2">
           <h2 className="text-balance text-[19px] font-semibold tracking-tight sm:text-[22px]">
-            {dragging ? 'Release to stage your files' : 'Drop anything here'}
+            {dragging ? t('drop.titleDragging') : t('drop.title')}
           </h2>
-          <p className="mx-auto max-w-md text-[13px] leading-relaxed text-muted sm:text-[13.5px]">
-            Screenshots, files, folders — nothing leaves your devices. Files travel peer-to-peer over an encrypted data channel.
-          </p>
+          <p className="mx-auto max-w-md text-[13px] leading-relaxed text-muted sm:text-[13.5px]">{t('drop.subtitle')}</p>
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
           <Button variant="primary" size="lg" onClick={choose} loading={busy} className="w-full sm:w-auto">
             <FilePlus2 className="size-4" />
-            Choose files
+            {t('drop.choose')}
           </Button>
           <Button variant="secondary" size="lg" onClick={paste} disabled={busy} className="w-full sm:w-auto">
             <ClipboardPaste className="size-4" />
-            Paste screenshot
+            {t('drop.paste')}
           </Button>
         </div>
 
@@ -127,19 +123,19 @@ export function DropZone({ onPasteHint }: { onPasteHint?: () => void }) {
           <span className="inline-flex items-center gap-1.5">
             <Kbd>Ctrl</Kbd>
             <Kbd>V</Kbd>
-            on Windows ·
+            {t('drop.onWindows')} ·
           </span>
           <span className="inline-flex items-center gap-1.5">
             <Kbd>⌘</Kbd>
             <Kbd>V</Kbd>
-            on macOS
+            {t('drop.onMac')}
           </span>
-          <span className="hidden sm:inline">· multi-select allowed</span>
+          <span className="hidden sm:inline">· {t('drop.multi')}</span>
         </p>
 
         {!hasDevices ? (
           <p className="mt-1 inline-flex items-center gap-2 rounded-full border border-warn/30 bg-warn/10 px-3 py-1 text-[12px] text-warn">
-            No paired devices yet — pair one before sending.
+            {t('drop.noDevices')}
           </p>
         ) : null}
       </div>
@@ -174,11 +170,11 @@ export function QueuePanel() {
     >
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div className="flex items-center gap-2">
-          <Badge tone="accent">{queue.length} staged</Badge>
-          <span className="text-[12.5px] text-muted">{formatBytes(total)} total</span>
+          <Badge tone="accent">{t('queue.staged', { n: queue.length })}</Badge>
+          <span className="text-[12.5px] text-muted">{t('queue.total', { size: formatBytes(total) })}</span>
         </div>
         <button onClick={clearQueue} className="inline-flex items-center gap-1.5 text-[12.5px] text-muted transition-colors hover:text-err">
-          <Trash2 className="size-3.5" /> Clear
+          <Trash2 className="size-3.5" /> {t('queue.clear')}
         </button>
       </div>
 
@@ -186,11 +182,7 @@ export function QueuePanel() {
         {queue.map((item) => (
           <li key={item.id} className="group relative flex items-center gap-3 rounded-xl border border-line bg-surface-2/70 p-2.5">
             <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-bg">
-              {item.previewUrl ? (
-                <img src={item.previewUrl} alt="" className="size-full object-cover" />
-              ) : (
-                <ImageIcon className="size-4 text-muted" />
-              )}
+              {item.previewUrl ? <img src={item.previewUrl} alt="" className="size-full object-cover" /> : <ImageIcon className="size-4 text-muted" />}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12.5px] font-medium">{item.file.name}</p>
@@ -202,7 +194,7 @@ export function QueuePanel() {
             </div>
             <button
               onClick={() => removeQueued(item.id)}
-              aria-label={`Remove ${item.file.name}`}
+              aria-label={t('queue.remove', { name: item.file.name })}
               className="rounded-md p-1 text-muted opacity-70 transition hover:bg-surface-3 hover:text-err"
             >
               <X className="size-3.5" />
@@ -213,16 +205,16 @@ export function QueuePanel() {
 
       <div className="flex flex-col gap-2 border-t border-line bg-surface-2/40 px-4 py-3 sm:flex-row sm:items-center">
         <label className="flex min-w-0 flex-1 items-center gap-2 text-[12.5px] text-muted">
-          Send to
+          {t('queue.sendTo')}
           <select
             value={target}
             onChange={(event) => setTarget(event.target.value)}
             className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-fg outline-none focus:border-accent-line"
           >
-            {devices.length === 0 ? <option value="">No devices</option> : null}
+            {devices.length === 0 ? <option value="">{t('queue.noDevices')}</option> : null}
             {devices.map((device) => (
               <option key={device.id} value={device.id}>
-                {device.name} {device.online ? '· online' : '· offline'}
+                {device.name} · {device.online ? t('queue.online') : t('queue.offline')}
               </option>
             ))}
           </select>
@@ -241,9 +233,9 @@ export function QueuePanel() {
           loading={sending}
         >
           <Send className="size-4" />
-          Send {queue.length > 1 ? `${queue.length} items` : 'now'}
+          {queue.length > 1 ? t('queue.sendItems', { n: queue.length }) : t('queue.sendNow')}
         </Button>
-        {target && linkStates[target] === 'connected' ? <Badge tone="ok">Live link</Badge> : null}
+        {target && linkStates[target] === 'connected' ? <Badge tone="ok">{t('queue.liveLink')}</Badge> : null}
       </div>
     </motion.section>
   );

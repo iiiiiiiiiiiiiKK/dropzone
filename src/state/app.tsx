@@ -759,11 +759,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       links: meshRef.current?.listLinks() ?? [],
       transfers: transfers.map((record) => ({ id: record.id, name: record.name, status: record.status, direction: record.direction, error: record.error })),
     });
+    void ice;
     (window as unknown as { __DROPZONE_DEBUG__?: () => unknown }).__DROPZONE_DEBUG__ = debug;
     return () => {
       delete (window as unknown as { __DROPZONE_DEBUG__?: () => unknown }).__DROPZONE_DEBUG__;
     };
-  }, [signalUrl, transfers]);
+  }, [signalUrl, transfers, ice]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

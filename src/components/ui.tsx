@@ -117,7 +117,7 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative h-6 w-11 shrink-0 rounded-full border transition-colors duration-200',
+        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border p-0.5 transition-colors duration-200',
         checked ? 'accent-gradient border-transparent' : 'border-line-strong bg-surface-3',
         disabled && 'opacity-50',
       )}
@@ -125,7 +125,8 @@ export function Switch({
       <motion.span
         layout
         transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-        className={cn('absolute top-0.5 size-4.5 rounded-full bg-white shadow-sm', checked ? 'left-[22px]' : 'left-0.5')}
+        className={cn('block size-[18px] shrink-0 rounded-full bg-white shadow-sm', checked ? 'translate-x-[20px]' : 'translate-x-0')}
+        style={{ marginLeft: 0 }}
       />
     </button>
   );

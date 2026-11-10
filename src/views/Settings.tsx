@@ -278,12 +278,12 @@ function SectionTitle({ icon, title, hint }: { icon: React.ReactNode; title: str
 
 function Row({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-      <div className="min-w-0">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0">
+      <div className="min-w-0 flex-1 basis-[min(100%,15rem)]">
         <p className="text-[12.5px] font-medium text-fg">{title}</p>
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted">{description}</p>
       </div>
-      <div className="shrink-0 self-start pt-0.5 sm:self-auto">{children}</div>
+      <div className="ml-auto flex shrink-0 items-center gap-2">{children}</div>
     </div>
   );
 }

@@ -5,9 +5,9 @@
 <h1 align="center">DROPZONE</h1>
 
 <p align="center">
-  <strong>Your Personal Transfer Space.</strong><br />
-  Local-first, peer-to-peer file transfer between your own devices.<br />
-  No accounts · no cloud file storage · no tracking.
+  <strong>你的个人传输空间 · Your Personal Transfer Space.</strong><br />
+  在自己设备之间点对点传文件与截图，本地优先，不经过云端存储。<br />
+  无需账号 · 不存云端 · 不做追踪 · <a href="#中文文档主">中文文档</a> · <a href="#why-dropzone">English</a>
 </p>
 
 <p align="center">
@@ -33,25 +33,186 @@
 
 ---
 
-## Contents
+## 目录 / Contents
 
-- [Why DROPZONE](#why-dropzone)
-- [Features](#features)
-- [Screenshots](#screenshots)
-- [Architecture](#architecture)
-- [How a transfer works](#how-a-transfer-works)
-- [Quick start](#quick-start)
-- [Configuration](#configuration)
-- [Build, test and checks](#build-test-and-checks)
-- [Deployment](#deployment)
-- [Security and privacy](#security-and-privacy)
-- [Browser support](#browser-support)
-- [Verification status](#verification-status)
-- [Known limitations](#known-limitations)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
-- [中文文档](#中文文档)
+**中文（主）**
+
+- [这是什么](#这是什么) · [功能](#功能) · [截图](#截图) · [架构要点](#架构要点) · [传输流程](#传输流程概要) · [快速开始](#快速开始) · [环境变量](#环境变量摘要) · [构建与检查](#构建与检查) · [部署](#部署) · [安全与隐私](#安全与隐私) · [验证状态](#验证状态真实执行) · [已知限制](#已知限制真实行为) · [路线图](#路线图)
+
+**English**
+
+- [Why DROPZONE](#why-dropzone) · [Features](#features) · [Screenshots](#screenshots) · [Architecture](#architecture) · [How a transfer works](#how-a-transfer-works) · [Quick start](#quick-start) · [Configuration](#configuration) · [Build and test](#build-test-and-checks) · [Deployment](#deployment) · [Security and privacy](#security-and-privacy) · [Verification status](#verification-status) · [Known limitations](#known-limitations)
+
+---
+
+## 中文文档（主）
+
+<p align="center"><strong>DROPZONE · 你的个人传输空间</strong><br />本地优先、在自己设备之间点对点传文件。没有账号，没有云盘存储，没有埋点追踪。</p>
+
+### 这是什么
+
+在自己两台设备之间传一个文件，本来不该这么麻烦。云盘要上传、聊天软件要压缩、邮件有大小限制、U 盘要有线。DROPZONE 换了个思路：两台设备各自打开页面，扫一次二维码完成配对，文件字节通过 WebRTC DataChannel 在两个浏览器之间**直接**传输。信令服务只负责撮合（在线状态、一次性配对邀请、SDP/ICE 转发），它从头到尾都拿不到文件字节、文件名或文件内容。历史记录、收藏和文本便签都存在你自己的 IndexedDB 里。
+
+它不是云盘、不是备份服务、也不是设备管理平台：没有注册、没有订阅、服务器上也没有一份需要你惦记着删掉的数据副本。
+
+### 功能
+
+- 📋 **Ctrl/⌘ + V 粘贴图片**：一次可粘贴多张截图，保留原始字节，不做二次编码。
+- 🖱️ **拖拽投放**：把文件或整批选择拖进工作区，发送前可预览缩略图与队列。
+- 📸 **内置截图/拍照 + 自定义区域**：手机端点相机直接拍照；桌面端点截图按钮后，浏览器会让你选择「整个屏幕 / 某个窗口 / 某个标签页」——**其他标签页的内容也能截**。截完可在预览上**拖拽框选任意区域**再发送，不需要任何第三方截图软件。
+- 📁 **文件选择器**：支持多选与大文件，按块流式发送。
+- ⌨️ **文本 / 剪贴板发送**：直接发一段文字，对方收到可选中、可复制的卡片。
+- 🔳 **二维码一次性配对**：短时效、单次使用的令牌；没有共享密码，没有长期邀请链接。
+- 🛡️ **ECDSA P-256 身份验证**：每台设备在 Web Crypto 中生成不可导出的 P-256 密钥对，配对时必须完成签名挑战。
+- 🔢 **安全码**：由双方公钥推导出的固定 `XXXX-XXXX-XXXX` 指纹，两个人可以面对面核对。
+- 🖥️ **设备管理**：重命名、解除配对、查看在线状态。
+- 🚚 **大文件分块传输**：64 KiB 分块，有序可靠 DataChannel。
+- 🧮 **SHA-256 完整性校验**：边传边计算增量哈希，接收端比对；不一致会明确报错而非静默接受。
+- ⏯️ **会话内续传**：链路中断后从最后确认的块偏移继续；刷新页面则标记为 `interrupted`，只能重新开始。
+- 🔔 **通知提示**：连接、进度、完成与失败都有 toast。
+- 🗂️ **纯本地历史**：传输记录、收藏与文本便签只存在本机 IndexedDB。
+- 💾 **存储用量与导出/清空**：查看配额占用、导出 JSON 快照、按需清空历史。
+- 🌗 **主题切换**：默认深色，可切浅色，按设备持久化。
+- 🌐 **中英双语界面**：顶栏语言按钮或「设置 → 语言」一键切换 English / 简体中文，无需刷新；按钮、弹窗、提示、传输状态与相对时间全部跟随，选择按设备保存。
+- 📱 **响应式布局**：桌面端工作台（侧边栏 + 设备栏 + 历史表格），移动端底部导航与安全区内边距。
+- 📲 **可安装 PWA**：manifest、Service Worker 静态壳缓存、独立窗口运行。
+
+### 界面语言与排版
+
+- 顶栏四个按钮统一为 36px 方形：**拍照**、**截图工具**、**语言（中文/EN）**、**主题（深/浅）**，外加右侧的作者 𝕏 入口。
+- 首屏标题为「**个人传输中心**」，移动端底部导航为「传输 / 历史 / 收藏 / 设备 / 设置」。
+- 移动端独立适配：单列卡片、底部抽屉式弹窗、带抓手的拖拽条、≥36px 触控目标、安全区内边距，设置页的开关与按钮在 iPhone 上右对齐且不会错位。
+- 全站中文与英文实时切换，无需刷新，选择保存在本机。
+
+### 截图
+
+见上方英文区的 Screenshots 小节：桌面深色/浅色、移动端、配对二维码、传输历史、设置，以及中文界面（`docs/screenshots/dashboard-zh.png`、`mobile-zh.png`）。
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-zh.png" alt="DROPZONE 中文界面" width="820" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings-mobile.png" alt="中文移动端设置页（开关右对齐）" width="200" />
+  <img src="docs/screenshots/capture-mobile.png" alt="中文移动端截图工具" width="200" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/mobile-zh.png" alt="DROPZONE 中文移动端界面" width="248" />
+</p>
+
+### 架构要点
+
+| 角色 | 职责 | 不做的事 |
+| --- | --- | --- |
+| 前端 SPA（`src/`） | 身份、存储、UI 状态、分块、哈希、WebRTC 连接全部在浏览器内完成 | 不向任何服务器发送文件字节 |
+| 信令中继（`server/`、`workers/signaling/`） | 设备名册与在线状态、一次性配对邀请、已配对设备之间的 SDP/ICE 转发、按需签发短期 TURN 凭证 | 不接收、不存储、不记录、不转发文件字节/文件名/内容 |
+| TURN 中继（coturn） | 当 ICE 无法直连（对称 NAT、严格防火墙）时转发加密的 DTLS 流 | 无法解密，只转发密文 |
+
+模块清单、数据模型表与配对/传输时序图见 [docs/architecture.md](docs/architecture.md)，线格式见 [docs/protocol.md](docs/protocol.md)。
+
+### 传输流程（概要）
+
+1. **配对**：A 生成 32 字节一次性令牌，只把 SHA-256 哈希登记到中继（5 分钟过期）；二维码里带设备 id、公钥、名称、令牌和过期时间。B 扫码后用自己的 P-256 身份发起 `hello { pairToken }`，中继校验哈希、有效期、单次使用与持有者在线，随后作废邀请。双方签名挑战验证私钥持有，并显示同一个安全码。
+2. **ICE**：双方从中继取得 ICE 配置（STUN，以及配置了 coturn 时按需生成的 HMAC 短期凭证，`username = "<过期时间>:<deviceId>"`）；SDP/ICE 通过中继以很小的 JSON 帧转发。能直连就直连，否则走 TURN，仍然端到端 DTLS 加密。
+3. **DataChannel**：打开有序可靠通道 `dropzone.v1`，发送方先发带签名的 `HELLO`；接收方回 `META/ACCEPT`（`offset=0` 为新传，`n` 为续传偏移）。64 KiB 分块写入，`bufferedAmount` 保持在 8 MiB 高水位以下，`bufferedamountlow`（1 MiB）后继续，弱网自动降到 16 KiB。SHA-256 边传边算，`DONE` 后接收端回 `VERIFY { ok }`，一致则落盘成历史记录，不一致则报错并可重试一次。
+
+### 快速开始
+
+需要 **Node.js >= 20.19** 与 Corepack 提供的 **pnpm**。
+
+```sh
+corepack enable
+pnpm install
+
+pnpm dev          # 终端 1：静态前端 http://127.0.0.1:5173
+pnpm dev:signal   # 终端 2：信令中继 ws://127.0.0.1:8787
+```
+
+用两个浏览器配置文件（或普通窗口 + 隐私窗口）打开页面，在 A 上点「配对设备」生成二维码，在 B 上扫码或粘贴令牌即可。信令地址解析顺序为 `window.__DROPZONE_CONFIG__.signalUrl` → `VITE_SIGNAL_URL` → 同源 `ws(s)://<当前域名>/ws`；纯静态托管且没有中继时，界面会显示离线状态，而不是假装已连接。
+
+### 环境变量（摘要）
+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `VITE_SIGNAL_URL` | 同源 `/ws` | 构建时写入产物的公网 `wss://` 信令地址 |
+| `VITE_STUN_URLS` | Cloudflare + Google STUN | 逗号分隔的 STUN 列表 |
+| `PORT` / `HOST` | `8787` / `0.0.0.0` | 信令服务监听地址 |
+| `ALLOWED_ORIGINS` | 空（放行全部） | 生产环境必须设置为前端准确来源 |
+| `PAIRING_TTL_SECONDS` | `300` | 一次性配对邀请有效期（60–900） |
+| `MAX_CLIENTS` | `1000` | 并发连接上限 |
+| `MAX_SIGNAL_BYTES` | `32768` | 信令帧上限（1 KiB–32 KiB），文件字节根本不会被接受 |
+| `TURN_URLS` / `TURN_SECRET` / `TURN_TTL_SECONDS` | 未设置 / 未设置 / `3600` | coturn 地址、`static-auth-secret`、凭证有效期；密钥只留在服务端 |
+| `SIGNAL_PUBLIC_URL` / `LOG_LEVEL` | 未设置 / `info` | 对外公布地址、日志级别（日志不含文件数据） |
+
+完整表格见英文区 Configuration。
+
+### 构建与检查
+
+| 命令 | 作用 |
+| --- | --- |
+| `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm build` | 类型检查 + `vite build` → `dist/` |
+| `pnpm test` | `vitest run` —— 19 个单元测试，覆盖分帧、设备身份、配对与格式化函数 |
+| `pnpm test:signal` | `node tests/signal-local.mjs` —— 针对运行中的中继执行协议 v1 集成测试（加 `SIGNAL_URL=…` 可指向线上部署） |
+| `pnpm preview` | 本地预览构建产物 |
+| `pnpm worker:dev` / `pnpm worker:deploy` | Cloudflare Worker + Durable Object 变体的本地运行与部署 |
+
+CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm build`、`pnpm test`。
+
+### 部署
+
+前端是静态产物，信令是独立服务，因此线上演示拆成两部分：**Web UI（PWA）托管在 GitHub Pages**（https://iiiiiiiiiiiiiKK.github.io/dropzone/），**信令中继 v1 运行在 Cloudflare Workers**（`wss://dropzone-signaling.changyuansex.workers.dev/ws`，Worker + Durable Object），TURN 中继可选、由自建 coturn 提供。产物在运行时读取 `config.json` 获得中继地址，因此 fork 之后改指向自己的中继无需重新构建；也可以在构建时通过 `VITE_SIGNAL_URL` 写入。详细步骤（GitHub Pages、Cloudflare Pages、Docker/VPS、coturn）见 [docs/deployment.md](docs/deployment.md)。
+
+### 安全与隐私
+
+- 文件字节、文件名、文本与历史记录从不离开浏览器；仓库里没有任何上传路由。
+- P-256 私钥以**不可导出**方式重新导入 Web Crypto，只能签名、无法导出。
+- 中继能看到：设备 id、显示名、设备类型、公钥、在线状态、配对邀请哈希、SDP/ICE 内容、消息大小与时序。中继看不到：文件内容、文件名、文件类型、文件大小、文本便签。
+- 中继在**对端发现**环节仍然是被信任的：它知道谁在线，理论上可以在配对时替换公钥——这正是安全码与 ECDSA 签名校验存在的理由，怀疑时可双方核对安全码。
+- TURN 只转发密文；`wss://` 是生产必需，`ws://` 仅供本地开发。
+
+### 验证状态（真实执行）
+
+| 检查项 | 方式 | 结果 |
+| --- | --- | --- |
+| 单元测试 | `pnpm test`（Vitest） | **19 个全部通过**：分帧编解码、P-256 身份与签名、安全码、配对令牌、格式化函数 |
+| 信令协议 v1 | `pnpm test:signal` | Node 中继上 **21 项检查通过**（一次性邀请、仅已配对设备可转发、限流、32 KiB 帧上限、TURN HMAC 凭证、来源拒绝）；同一套测试在 `wrangler dev` 的 Worker 变体上同样通过 |
+| 生产构建 | `pnpm build` | `tsc --noEmit` 无错误，`vite build` 产出 `dist/` |
+| 浏览器端到端 | 两个真实 Chromium 上下文 + 真实用户操作 | 通过一次性二维码/链接完成配对，交换 offer/answer/ICE，**32 B** 与 **150 000 B** 文件传输完成后双方 SHA-256 一致，接收端可从 IndexedDB 读出文件 |
+| 线上部署 | 线上 GitHub Pages + 已部署的 Worker 中继 | 同一套端到端流程多次通过，控制台无报错 |
+| 响应式检查 | 393×852、820×1180、1024×800、1440×940 | 无横向溢出、无控件裁切、字体正常加载、触控目标 ≥ 28 px |
+| 剪贴板 | 剪贴板中放图片后按 `Ctrl/Cmd+V` | 原始字节入队，显示缩略图、尺寸与大小，全程不上传 |
+
+### 已知限制（真实行为）
+
+- 剪贴板读取需要页面聚焦与用户手势；iOS Safari 完全不开放脚本读取剪贴板，只能手动粘贴。
+- 标签页或 PWA 未运行时无法后台接收，传输期间请保持双方页面打开。
+- 刷新页面后不支持续传：记录标记为 `interrupted`，只能从头重传；会话内的续传是可用的。
+- 托管演示（GitHub Pages）只有静态 UI，需要自建信令；未配置时显示离线状态。
+- 每台已配对设备同时只维持一条对等连接，没有多播/群发。
+- 浏览器存储可能被清理，IndexedDB 不是备份；需要留存请使用历史导出。
+
+### 路线图
+
+- 通过 File System Access API 流式写盘接收，其余浏览器使用有界内存回退。
+- 基于 OPFS 的跨刷新续传。
+- 一对多群发（一次发往多台自己的设备）。
+- 显式的设备撤销界面与可见的信任台账。
+- 依据 `getStats()` 往返时延自适应调整分块与速率。
+- 真实浏览器端到端测试（双对等上下文、剪贴板、移动布局）。
+
+### 贡献与许可
+
+欢迎 issue 与 PR，请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)；安全问题见 [SECURITY.md](SECURITY.md)。
+
+MIT © 2025 DROPZONE contributors (0xkillcoin)，详见 [LICENSE](LICENSE)。
+
+
+
+---
+
+<p align="center">
+  <a href="https://x.com/0xkillcoin"><strong>𝕏 @0xkillcoin</strong></a>
+</p>
 
 ---
 
@@ -77,7 +238,7 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 
 - 📋 **Ctrl/⌘ + V image paste** — paste one or many screenshots; original bytes are preserved (no re-encode, no JPEG round-trip).
 - 🖱️ **Drag & drop** — drop files or whole selections onto the workspace; the queue previews thumbnails before sending.
-- 📸 **Built-in capture** — the camera button grabs a photo on phones and the screenshot button captures a window or the whole screen on desktop (`getDisplayMedia`), so no second app is needed; both land straight in the send queue as PNG.
+- 📸 **Built-in capture with custom region** — the camera button grabs a photo on phones; on desktop the screenshot button uses `getDisplayMedia` so you can pick **the whole screen, a window, or another browser tab**, then **drag to crop any region** before sending. Everything is encoded locally as PNG and dropped straight into the send queue.
 - 📁 **File picker** — multi-select, arbitrary size, streamed through chunks rather than buffered per file.
 - ⌨️ **Text / clipboard sending** — send a snippet or a note; it arrives as a selectable, copyable card.
 
@@ -130,9 +291,10 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 <p align="center"><em>Transfer history with favorites, and settings (theme, device name, retention, storage, relay URL).</em></p>
 
 <p align="center">
-  <img src="docs/screenshots/mobile-dark.png" alt="DROPZONE mobile transfer screen with bottom navigation" width="248" />
-  <img src="docs/screenshots/mobile-history.png" alt="DROPZONE mobile transfer history" width="248" />
-  <img src="docs/screenshots/mobile-devices.png" alt="DROPZONE mobile device list" width="248" />
+  <img src="docs/screenshots/mobile-dark.png" alt="DROPZONE mobile transfer screen with bottom navigation" width="214" />
+  <img src="docs/screenshots/mobile-history.png" alt="DROPZONE mobile transfer history" width="214" />
+  <img src="docs/screenshots/mobile-devices.png" alt="DROPZONE mobile device list" width="214" />
+  <img src="docs/screenshots/settings-mobile.png" alt="DROPZONE mobile settings with aligned switches" width="214" />
 </p>
 
 <p align="center"><em>Mobile layout at 393×852 — bottom tab bar, safe-area insets, touch-sized targets, same local history.</em></p>
@@ -143,7 +305,8 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/capture.png" alt="DROPZONE built-in screenshot and camera capture dialog" width="520" />
+  <img src="docs/screenshots/capture.png" alt="DROPZONE built-in screenshot and camera capture dialog" width="420" />
+  <img src="docs/screenshots/capture-mobile.png" alt="DROPZONE capture sheet on a phone" width="150" />
 </p>
 
 <p align="center"><em>Built-in capture — screen or camera, straight into the send queue.</em></p>
@@ -421,164 +584,3 @@ MIT © 2025 DROPZONE contributors (0xkillcoin). See [LICENSE](LICENSE).
 <p align="center"><sub>Your files stay yours. That is the whole product.</sub></p>
 
 ---
-
-## 中文文档
-
-<details open>
-<summary><strong>简体中文全量说明（点击折叠 / 展开）</strong></summary>
-
-<p align="center"><strong>DROPZONE · 你的个人传输空间</strong><br />本地优先、在自己设备之间点对点传文件。没有账号，没有云盘存储，没有埋点追踪。</p>
-
-### 这是什么
-
-在自己两台设备之间传一个文件，本来不该这么麻烦。云盘要上传、聊天软件要压缩、邮件有大小限制、U 盘要有线。DROPZONE 换了个思路：两台设备各自打开页面，扫一次二维码完成配对，文件字节通过 WebRTC DataChannel 在两个浏览器之间**直接**传输。信令服务只负责撮合（在线状态、一次性配对邀请、SDP/ICE 转发），它从头到尾都拿不到文件字节、文件名或文件内容。历史记录、收藏和文本便签都存在你自己的 IndexedDB 里。
-
-它不是云盘、不是备份服务、也不是设备管理平台：没有注册、没有订阅、服务器上也没有一份需要你惦记着删掉的数据副本。
-
-### 功能
-
-- 📋 **Ctrl/⌘ + V 粘贴图片**：一次可粘贴多张截图，保留原始字节，不做二次编码。
-- 🖱️ **拖拽投放**：把文件或整批选择拖进工作区，发送前可预览缩略图与队列。
-- 📸 **内置截图/拍照**：手机端点相机按钮直接拍照，桌面端点截图按钮选择窗口或整屏（`getDisplayMedia`），无需任何第三方软件，PNG 直接进入待发送队列。
-- 📁 **文件选择器**：支持多选与大文件，按块流式发送。
-- ⌨️ **文本 / 剪贴板发送**：直接发一段文字，对方收到可选中、可复制的卡片。
-- 🔳 **二维码一次性配对**：短时效、单次使用的令牌；没有共享密码，没有长期邀请链接。
-- 🛡️ **ECDSA P-256 身份验证**：每台设备在 Web Crypto 中生成不可导出的 P-256 密钥对，配对时必须完成签名挑战。
-- 🔢 **安全码**：由双方公钥推导出的固定 `XXXX-XXXX-XXXX` 指纹，两个人可以面对面核对。
-- 🖥️ **设备管理**：重命名、解除配对、查看在线状态。
-- 🚚 **大文件分块传输**：64 KiB 分块，有序可靠 DataChannel。
-- 🧮 **SHA-256 完整性校验**：边传边计算增量哈希，接收端比对；不一致会明确报错而非静默接受。
-- ⏯️ **会话内续传**：链路中断后从最后确认的块偏移继续；刷新页面则标记为 `interrupted`，只能重新开始。
-- 🔔 **通知提示**：连接、进度、完成与失败都有 toast。
-- 🗂️ **纯本地历史**：传输记录、收藏与文本便签只存在本机 IndexedDB。
-- 💾 **存储用量与导出/清空**：查看配额占用、导出 JSON 快照、按需清空历史。
-- 🌗 **主题切换**：默认深色，可切浅色，按设备持久化。
-- 🌐 **中英双语界面**：顶栏语言按钮或「设置 → 语言」一键切换 English / 简体中文，无需刷新；按钮、弹窗、提示、传输状态与相对时间全部跟随，选择按设备保存。
-- 📱 **响应式布局**：桌面端工作台（侧边栏 + 设备栏 + 历史表格），移动端底部导航与安全区内边距。
-- 📲 **可安装 PWA**：manifest、Service Worker 静态壳缓存、独立窗口运行。
-
-### 截图
-
-见上方英文区的 Screenshots 小节：桌面深色/浅色、移动端、配对二维码、传输历史、设置，以及中文界面（`docs/screenshots/dashboard-zh.png`、`mobile-zh.png`）。
-
-<p align="center">
-  <img src="docs/screenshots/dashboard-zh.png" alt="DROPZONE 中文界面" width="820" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/mobile-zh.png" alt="DROPZONE 中文移动端界面" width="248" />
-</p>
-
-### 架构要点
-
-| 角色 | 职责 | 不做的事 |
-| --- | --- | --- |
-| 前端 SPA（`src/`） | 身份、存储、UI 状态、分块、哈希、WebRTC 连接全部在浏览器内完成 | 不向任何服务器发送文件字节 |
-| 信令中继（`server/`、`workers/signaling/`） | 设备名册与在线状态、一次性配对邀请、已配对设备之间的 SDP/ICE 转发、按需签发短期 TURN 凭证 | 不接收、不存储、不记录、不转发文件字节/文件名/内容 |
-| TURN 中继（coturn） | 当 ICE 无法直连（对称 NAT、严格防火墙）时转发加密的 DTLS 流 | 无法解密，只转发密文 |
-
-模块清单、数据模型表与配对/传输时序图见 [docs/architecture.md](docs/architecture.md)，线格式见 [docs/protocol.md](docs/protocol.md)。
-
-### 传输流程（概要）
-
-1. **配对**：A 生成 32 字节一次性令牌，只把 SHA-256 哈希登记到中继（5 分钟过期）；二维码里带设备 id、公钥、名称、令牌和过期时间。B 扫码后用自己的 P-256 身份发起 `hello { pairToken }`，中继校验哈希、有效期、单次使用与持有者在线，随后作废邀请。双方签名挑战验证私钥持有，并显示同一个安全码。
-2. **ICE**：双方从中继取得 ICE 配置（STUN，以及配置了 coturn 时按需生成的 HMAC 短期凭证，`username = "<过期时间>:<deviceId>"`）；SDP/ICE 通过中继以很小的 JSON 帧转发。能直连就直连，否则走 TURN，仍然端到端 DTLS 加密。
-3. **DataChannel**：打开有序可靠通道 `dropzone.v1`，发送方先发带签名的 `HELLO`；接收方回 `META/ACCEPT`（`offset=0` 为新传，`n` 为续传偏移）。64 KiB 分块写入，`bufferedAmount` 保持在 8 MiB 高水位以下，`bufferedamountlow`（1 MiB）后继续，弱网自动降到 16 KiB。SHA-256 边传边算，`DONE` 后接收端回 `VERIFY { ok }`，一致则落盘成历史记录，不一致则报错并可重试一次。
-
-### 快速开始
-
-需要 **Node.js >= 20.19** 与 Corepack 提供的 **pnpm**。
-
-```sh
-corepack enable
-pnpm install
-
-pnpm dev          # 终端 1：静态前端 http://127.0.0.1:5173
-pnpm dev:signal   # 终端 2：信令中继 ws://127.0.0.1:8787
-```
-
-用两个浏览器配置文件（或普通窗口 + 隐私窗口）打开页面，在 A 上点「配对设备」生成二维码，在 B 上扫码或粘贴令牌即可。信令地址解析顺序为 `window.__DROPZONE_CONFIG__.signalUrl` → `VITE_SIGNAL_URL` → 同源 `ws(s)://<当前域名>/ws`；纯静态托管且没有中继时，界面会显示离线状态，而不是假装已连接。
-
-### 环境变量（摘要）
-
-| 变量 | 默认值 | 用途 |
-| --- | --- | --- |
-| `VITE_SIGNAL_URL` | 同源 `/ws` | 构建时写入产物的公网 `wss://` 信令地址 |
-| `VITE_STUN_URLS` | Cloudflare + Google STUN | 逗号分隔的 STUN 列表 |
-| `PORT` / `HOST` | `8787` / `0.0.0.0` | 信令服务监听地址 |
-| `ALLOWED_ORIGINS` | 空（放行全部） | 生产环境必须设置为前端准确来源 |
-| `PAIRING_TTL_SECONDS` | `300` | 一次性配对邀请有效期（60–900） |
-| `MAX_CLIENTS` | `1000` | 并发连接上限 |
-| `MAX_SIGNAL_BYTES` | `32768` | 信令帧上限（1 KiB–32 KiB），文件字节根本不会被接受 |
-| `TURN_URLS` / `TURN_SECRET` / `TURN_TTL_SECONDS` | 未设置 / 未设置 / `3600` | coturn 地址、`static-auth-secret`、凭证有效期；密钥只留在服务端 |
-| `SIGNAL_PUBLIC_URL` / `LOG_LEVEL` | 未设置 / `info` | 对外公布地址、日志级别（日志不含文件数据） |
-
-完整表格见英文区 Configuration。
-
-### 构建与检查
-
-| 命令 | 作用 |
-| --- | --- |
-| `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm build` | 类型检查 + `vite build` → `dist/` |
-| `pnpm test` | `vitest run` —— 19 个单元测试，覆盖分帧、设备身份、配对与格式化函数 |
-| `pnpm test:signal` | `node tests/signal-local.mjs` —— 针对运行中的中继执行协议 v1 集成测试（加 `SIGNAL_URL=…` 可指向线上部署） |
-| `pnpm preview` | 本地预览构建产物 |
-| `pnpm worker:dev` / `pnpm worker:deploy` | Cloudflare Worker + Durable Object 变体的本地运行与部署 |
-
-CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm build`、`pnpm test`。
-
-### 部署
-
-前端是静态产物，信令是独立服务，因此线上演示拆成两部分：**Web UI（PWA）托管在 GitHub Pages**（https://iiiiiiiiiiiiiKK.github.io/dropzone/），**信令中继 v1 运行在 Cloudflare Workers**（`wss://dropzone-signaling.changyuansex.workers.dev/ws`，Worker + Durable Object），TURN 中继可选、由自建 coturn 提供。产物在运行时读取 `config.json` 获得中继地址，因此 fork 之后改指向自己的中继无需重新构建；也可以在构建时通过 `VITE_SIGNAL_URL` 写入。详细步骤（GitHub Pages、Cloudflare Pages、Docker/VPS、coturn）见 [docs/deployment.md](docs/deployment.md)。
-
-### 安全与隐私
-
-- 文件字节、文件名、文本与历史记录从不离开浏览器；仓库里没有任何上传路由。
-- P-256 私钥以**不可导出**方式重新导入 Web Crypto，只能签名、无法导出。
-- 中继能看到：设备 id、显示名、设备类型、公钥、在线状态、配对邀请哈希、SDP/ICE 内容、消息大小与时序。中继看不到：文件内容、文件名、文件类型、文件大小、文本便签。
-- 中继在**对端发现**环节仍然是被信任的：它知道谁在线，理论上可以在配对时替换公钥——这正是安全码与 ECDSA 签名校验存在的理由，怀疑时可双方核对安全码。
-- TURN 只转发密文；`wss://` 是生产必需，`ws://` 仅供本地开发。
-
-### 验证状态（真实执行）
-
-| 检查项 | 方式 | 结果 |
-| --- | --- | --- |
-| 单元测试 | `pnpm test`（Vitest） | **19 个全部通过**：分帧编解码、P-256 身份与签名、安全码、配对令牌、格式化函数 |
-| 信令协议 v1 | `pnpm test:signal` | Node 中继上 **21 项检查通过**（一次性邀请、仅已配对设备可转发、限流、32 KiB 帧上限、TURN HMAC 凭证、来源拒绝）；同一套测试在 `wrangler dev` 的 Worker 变体上同样通过 |
-| 生产构建 | `pnpm build` | `tsc --noEmit` 无错误，`vite build` 产出 `dist/` |
-| 浏览器端到端 | 两个真实 Chromium 上下文 + 真实用户操作 | 通过一次性二维码/链接完成配对，交换 offer/answer/ICE，**32 B** 与 **150 000 B** 文件传输完成后双方 SHA-256 一致，接收端可从 IndexedDB 读出文件 |
-| 线上部署 | 线上 GitHub Pages + 已部署的 Worker 中继 | 同一套端到端流程多次通过，控制台无报错 |
-| 响应式检查 | 393×852、820×1180、1024×800、1440×940 | 无横向溢出、无控件裁切、字体正常加载、触控目标 ≥ 28 px |
-| 剪贴板 | 剪贴板中放图片后按 `Ctrl/Cmd+V` | 原始字节入队，显示缩略图、尺寸与大小，全程不上传 |
-
-### 已知限制（真实行为）
-
-- 剪贴板读取需要页面聚焦与用户手势；iOS Safari 完全不开放脚本读取剪贴板，只能手动粘贴。
-- 标签页或 PWA 未运行时无法后台接收，传输期间请保持双方页面打开。
-- 刷新页面后不支持续传：记录标记为 `interrupted`，只能从头重传；会话内的续传是可用的。
-- 托管演示（GitHub Pages）只有静态 UI，需要自建信令；未配置时显示离线状态。
-- 每台已配对设备同时只维持一条对等连接，没有多播/群发。
-- 浏览器存储可能被清理，IndexedDB 不是备份；需要留存请使用历史导出。
-
-### 路线图
-
-- 通过 File System Access API 流式写盘接收，其余浏览器使用有界内存回退。
-- 基于 OPFS 的跨刷新续传。
-- 一对多群发（一次发往多台自己的设备）。
-- 显式的设备撤销界面与可见的信任台账。
-- 依据 `getStats()` 往返时延自适应调整分块与速率。
-- 真实浏览器端到端测试（双对等上下文、剪贴板、移动布局）。
-
-### 贡献与许可
-
-欢迎 issue 与 PR，请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)；安全问题见 [SECURITY.md](SECURITY.md)。
-
-MIT © 2025 DROPZONE contributors (0xkillcoin)，详见 [LICENSE](LICENSE)。
-
-</details>
-
----
-
-<p align="center">
-  <a href="https://x.com/0xkillcoin"><strong>𝕏 @0xkillcoin</strong></a>
-</p>

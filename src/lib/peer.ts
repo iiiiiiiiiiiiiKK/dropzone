@@ -68,12 +68,22 @@ export class PeerMesh {
     }
     // Whoever needs the channel offers, regardless of id ordering: a send can start
     // from either device. Simultaneous offers are resolved in handleSignal.
-    const link = this.getOrCreateLink(deviceId, true);
-    if (link.channel?.readyState === 'open') return link.channel;
-    if (link.pc.signalingState === 'stable') {
-      await this.negotiate(link);
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const link = this.getOrCreateLink(deviceId, true);
+      if (link.channel?.readyState === 'open') return link.channel;
+      if (link.pc.signalingState === 'stable') {
+        await this.negotiate(link);
+      }
+      try {
+        return await this.waitForOpen(link, attempt === 0 ? 9_000 : 16_000);
+      } catch (error) {
+        lastError = error as Error;
+        trace('peer', 'handshake attempt failed', deviceId.slice(0, 8), lastError.message);
+        this.close(deviceId);
+      }
     }
-    return await this.waitForOpen(link);
+    throw lastError ?? new Error('Connection failed');
   }
 
   async handleSignal(from: string, data: SignalData): Promise<void> {
@@ -264,13 +274,13 @@ export class PeerMesh {
     };
   }
 
-  private waitForOpen(link: Link): Promise<RTCDataChannel> {
+  private waitForOpen(link: Link, timeoutMs = 25_000): Promise<RTCDataChannel> {
     if (link.channel?.readyState === 'open') return Promise.resolve(link.channel);
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         cleanup();
         reject(new Error('Connection timed out'));
-      }, 25_000);
+      }, timeoutMs);
       const check = () => {
         if (link.channel?.readyState === 'open') {
           cleanup();

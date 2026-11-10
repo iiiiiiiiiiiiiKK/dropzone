@@ -451,15 +451,25 @@ export class TransferEngine {
 
     try {
       await this.openChannel(deviceId);
+      // Register the waiter BEFORE sending: the peer may answer within the same tick
+      // and an unregistered ACCEPT would be dropped, stalling the transfer.
+      const acceptPromise = this.waitFor(id, 'accept', ACCEPT_TIMEOUT_MS);
       const sentMeta = this.options.mesh.send(
         deviceId,
         encodeJsonFrame(FRAME.META, { transferId: id, name, mime: file.type || 'application/octet-stream', size: file.size, sha256: digest, chunkSize: CHUNK_SIZE }),
       );
-      if (!sentMeta) throw new Error('Connection is not ready');
+      if (!sentMeta) {
+        const pendingMeta = this.pending.get(id);
+        if (pendingMeta) {
+          clearTimeout(pendingMeta.timer);
+          this.pending.delete(id);
+        }
+        throw new Error('Connection is not ready');
+      }
       await db.transfers.update(id, { status: 'transferring', sha256: digest });
       this.options.events.onRecord({ ...record, status: 'transferring', sha256: digest });
 
-      const accepted = await this.waitFor(id, 'accept', ACCEPT_TIMEOUT_MS);
+      const accepted = await acceptPromise;
       if (accepted.kind === 'reject') throw new Error(accepted.reason === 'declined' ? 'Declined by the other device' : 'Transfer rejected');
       const offset = accepted.kind === 'accept' ? Math.max(0, Math.min(accepted.offset, file.size)) : 0;
 
@@ -496,8 +506,9 @@ export class TransferEngine {
       }
 
       await db.transfers.update(id, { status: 'verifying' });
+      const verifyPromise = this.waitFor(id, 'verify', VERIFY_TIMEOUT_MS);
       this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.DONE, { transferId: id, sha256: digest, size: file.size }));
-      const verification = await this.waitFor(id, 'verify', VERIFY_TIMEOUT_MS);
+      const verification = await verifyPromise;
       const ok = verification.kind === 'verify' && verification.ok;
       await db.transfers.update(id, { status: ok ? 'completed' : 'failed', completedAt: ok ? Date.now() : undefined, error: ok ? undefined : 'Checksum mismatch' });
       const finalRecord = await db.transfers.get(id);

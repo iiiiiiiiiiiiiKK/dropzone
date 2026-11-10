@@ -387,6 +387,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const waitForRelay = useCallback(async (timeoutMs = 10_000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (relayRef.current?.currentState === 'online') return true;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    return relayRef.current?.currentState === 'online';
+  }, []);
+
   const sendQueued = useCallback(
     async (deviceId: string) => {
       const items = queue;
@@ -396,12 +405,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       if (items.length === 0) return;
       clearQueue();
+      await waitForRelay();
       await engineRef.current?.sendFiles(
         deviceId,
         items.map((item) => item.file),
       );
     },
-    [queue, clearQueue, toasts],
+    [queue, clearQueue, toasts, waitForRelay],
   );
 
   const sendFilesTo = useCallback(
@@ -411,9 +421,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (files.length === 0) return;
+      const online = await waitForRelay();
+      if (!online) toasts.push({ tone: 'warn', title: 'Relay offline', body: 'Reconnect the signaling relay before sending.' });
       await engineRef.current?.sendFiles(deviceId, files);
     },
-    [toasts],
+    [toasts, waitForRelay],
   );
 
   const sendTextTo = useCallback(

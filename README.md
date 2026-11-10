@@ -77,6 +77,7 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 
 - 📋 **Ctrl/⌘ + V image paste** — paste one or many screenshots; original bytes are preserved (no re-encode, no JPEG round-trip).
 - 🖱️ **Drag & drop** — drop files or whole selections onto the workspace; the queue previews thumbnails before sending.
+- 📸 **Built-in capture** — the camera button grabs a photo on phones and the screenshot button captures a window or the whole screen on desktop (`getDisplayMedia`), so no second app is needed; both land straight in the send queue as PNG.
 - 📁 **File picker** — multi-select, arbitrary size, streamed through chunks rather than buffered per file.
 - ⌨️ **Text / clipboard sending** — send a snippet or a note; it arrives as a selectable, copyable card.
 
@@ -140,6 +141,12 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
   <img src="docs/screenshots/dashboard-zh.png" alt="DROPZONE interface in Simplified Chinese" width="640" />
   <img src="docs/screenshots/mobile-zh.png" alt="DROPZONE mobile interface in Simplified Chinese" width="196" />
 </p>
+
+<p align="center">
+  <img src="docs/screenshots/capture.png" alt="DROPZONE built-in screenshot and camera capture dialog" width="520" />
+</p>
+
+<p align="center"><em>Built-in capture — screen or camera, straight into the send queue.</em></p>
 
 <p align="center"><em>Same build, switched to 简体中文 from the top bar — no reload, no separate bundle.</em></p>
 
@@ -432,6 +439,7 @@ MIT © 2025 DROPZONE contributors (0xkillcoin). See [LICENSE](LICENSE).
 
 - 📋 **Ctrl/⌘ + V 粘贴图片**：一次可粘贴多张截图，保留原始字节，不做二次编码。
 - 🖱️ **拖拽投放**：把文件或整批选择拖进工作区，发送前可预览缩略图与队列。
+- 📸 **内置截图/拍照**：手机端点相机按钮直接拍照，桌面端点截图按钮选择窗口或整屏（`getDisplayMedia`），无需任何第三方软件，PNG 直接进入待发送队列。
 - 📁 **文件选择器**：支持多选与大文件，按块流式发送。
 - ⌨️ **文本 / 剪贴板发送**：直接发一段文字，对方收到可选中、可复制的卡片。
 - 🔳 **二维码一次性配对**：短时效、单次使用的令牌；没有共享密码，没有长期邀请链接。

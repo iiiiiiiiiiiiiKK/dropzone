@@ -8,12 +8,12 @@ const DICT: Record<string, [string, string]> = {
   'top.author': ['Author on X — @0xkillcoin', '作者 X — @0xkillcoin'],
 
   // navigation
-  'nav.workspace': ['Workspace', '工作台'],
+  'nav.workspace': ['Personal Transfer Center', '个人传输中心'],
   'nav.history': ['Recent transfers', '最近传输'],
   'nav.favorites': ['Favorites', '收藏'],
   'nav.devices': ['My devices', '我的设备'],
   'nav.settings': ['Settings', '设置'],
-  'nav.mobileSend': ['Send', '传输'],
+  'nav.mobileSend': ['Transfer', '传输'],
   'nav.mobileHistory': ['History', '历史'],
   'nav.mobileSaved': ['Saved', '收藏'],
   'nav.mobileDevices': ['Devices', '设备'],
@@ -21,6 +21,23 @@ const DICT: Record<string, [string, string]> = {
 
   // top bar / status
   'top.lang': ['Switch language', '切换语言'],
+  'top.shoot': ['Take a photo', '拍照'],
+  'top.capture': ['Screenshot tool', '截图工具'],
+  'cap.title': ['Capture', '截图 / 拍照'],
+  'cap.desc': ['Grab a screen or camera still and send it — no extra software needed.', '直接截屏或拍照并发送，不需要额外软件。'],
+  'cap.screen': ['Capture screen', '截取屏幕'],
+  'cap.screenHint': ['Pick a window or the whole screen in the browser prompt.', '在浏览器弹窗中选择窗口或整个屏幕。'],
+  'cap.camera': ['Use camera', '使用相机'],
+  'cap.cameraHint': ['Take a still with the rear camera.', '用后置摄像头拍一张。'],
+  'cap.shoot': ['Capture frame', '拍下这一帧'],
+  'cap.use': ['Send this', '加入发送'],
+  'cap.retake': ['Retake', '重拍'],
+  'cap.denied': ['Screen capture was blocked or cancelled.', '屏幕捕获被拒绝或取消了。'],
+  'cap.unsupported': ['This browser cannot capture the screen.', '当前浏览器不支持屏幕捕获。'],
+  'cap.failed': ['The capture produced no image.', '捕获没有产生图像。'],
+  'cap.privacy': ['Captures stay in this browser until you send them; nothing is uploaded.', '截图只留在本浏览器，除非你发送，否则不会上传。'],
+  'cap.staged': ['Screenshot staged', '截图已加入待发送'],
+  'cap.stagedBody': ['Pick a device and hit send.', '选择设备后点击发送。'],
   'top.themeLight': ['Switch to light theme', '切换到浅色主题'],
   'top.themeDark': ['Switch to dark theme', '切换到深色主题'],
   'top.device': ['This device', '本机'],
@@ -131,6 +148,8 @@ const DICT: Record<string, [string, string]> = {
   'xfer.from': ['from {name}', '来自 {name}'],
   'xfer.to': ['to {name}', '发送给 {name}'],
   'xfer.save': ['Save file', '保存文件'],
+  'xfer.savedToast': ['Saved to your downloads', '已保存到下载目录'],
+  'xfer.savedHint': ['If nothing appeared, check the browser download bar.', '如果没看到文件，请查看浏览器下载栏。'],
   'xfer.preview': ['Preview image', '预览图片'],
   'xfer.leaveGuard': [
     'A transfer is still running. Leaving now will interrupt it.',
@@ -294,7 +313,10 @@ const DICT: Record<string, [string, string]> = {
     '来自已配对设备的文件直接接收；关闭后每次都需要你确认。',
   ],
   'set.notifications': ['Desktop notifications', '桌面通知'],
-  'set.notificationsDesc': ['Show a system notification when a transfer completes in the background.', '后台传输完成时弹出系统通知。'],
+  'set.notificationsDesc': [
+    'Show a system notification when a transfer completes while DROPZONE runs in a background tab. It only fires while the page is alive — it cannot wake a closed PWA, and the browser must grant permission once.',
+    '当 DROPZONE 在后台标签运行时，传输完成会弹出系统通知。仅在页面仍存活时生效，无法唤醒已关闭的 PWA，且需要浏览器授权一次。',
+  ],
   'set.allow': ['Allow', '授权'],
   'set.retention': ['History retention', '历史保留条数'],
   'set.retentionDesc': ['Favorites are always kept. Older records beyond this limit are pruned automatically.', '收藏始终保留，超出条数的旧记录会被自动清理。'],
@@ -377,7 +399,7 @@ const DICT: Record<string, [string, string]> = {
   'notice.text': ['Text from {name}', '{name} 发来文字'],
 
   // views meta
-  'view.workspace.title': ['Workspace', '工作台'],
+  'view.workspace.title': ['Personal Transfer Center', '个人传输中心'],
   'view.workspace.sub': ['Your Personal Transfer Space.', '你的个人传输空间。'],
   'view.history.title': ['Recent transfers', '最近传输'],
   'view.history.sub': ['Everything that moved, stored on this device only.', '所有传输记录，仅保存在本机。'],

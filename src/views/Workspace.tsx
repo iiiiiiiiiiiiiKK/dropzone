@@ -40,7 +40,7 @@ export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) 
         <DropZone onPasteHint={() => onNavigate('settings')} />
 
         {touch ? (
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-4 gap-2 max-[380px]:grid-cols-2">
             {[
               {
                 label: t('ws.quickPaste'),
@@ -88,7 +88,7 @@ export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) 
               <h2 className="text-[13px] font-semibold">{t('ws.recent')}</h2>
               <Badge>{transfers.length}</Badge>
             </div>
-            <button onClick={() => onNavigate('history')} className="inline-flex items-center gap-1 text-[12px] text-muted transition-colors hover:text-fg">
+            <button onClick={() => onNavigate('history')} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] text-muted transition-colors hover:bg-surface-2 hover:text-fg">
               {t('ws.viewAll')} <ArrowRight className="size-3.5" />
             </button>
           </div>

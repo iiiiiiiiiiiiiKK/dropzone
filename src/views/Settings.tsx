@@ -201,26 +201,28 @@ export function Settings() {
 
       <Card className="p-4 sm:p-5">
         <SectionTitle icon={<Info className="size-4" />} title={t('set.about')} hint={t('set.aboutHint')} />
-        <div className="mt-3 grid gap-2 text-[12.5px] text-muted sm:grid-cols-2">
-          <p>
-            {t('set.version')} <span className="font-mono text-fg-soft">{APP_VERSION}</span>
-          </p>
-          <p>
-            {t('set.license')} <span className="font-mono text-fg-soft">MIT</span>
-          </p>
-          <p>
-            {t('set.source')}{' '}
-            <a className="text-accent hover:underline" href={REPO_URL} target="_blank" rel="noreferrer noopener">
-              github.com/iiiiiiiiiiiiiKK/dropzone
-            </a>
-          </p>
-          <p>
-            {t('set.author')}{' '}
-            <a className="text-accent hover:underline" href={AUTHOR_X_URL} target="_blank" rel="noreferrer noopener">
-              𝕏 @0xkillcoin
-            </a>
-          </p>
-        </div>
+        <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <AboutTile label={t('set.version')} value={APP_VERSION} mono />
+          <AboutTile label={t('set.license')} value="MIT" mono />
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="group rounded-xl border border-line bg-surface-2/40 px-3 py-2 transition-colors hover:border-accent-line hover:bg-surface-2"
+          >
+            <dt className="text-[10.5px] uppercase tracking-[0.12em] text-muted">{t('set.source')}</dt>
+            <dd className="mt-0.5 truncate text-[12px] font-medium text-fg-soft group-hover:text-accent">GitHub</dd>
+          </a>
+          <a
+            href={AUTHOR_X_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="group rounded-xl border border-line bg-surface-2/40 px-3 py-2 transition-colors hover:border-accent-line hover:bg-surface-2"
+          >
+            <dt className="text-[10.5px] uppercase tracking-[0.12em] text-muted">{t('set.author')}</dt>
+            <dd className="mt-0.5 truncate text-[12px] font-medium text-fg-soft group-hover:text-accent">𝕏 @0xkillcoin</dd>
+          </a>
+        </dl>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3 rounded-xl border border-line bg-surface-2/40 px-3 py-2 text-[11.5px] leading-relaxed text-muted">
           {t('set.privacyNote')}
         </motion.p>
@@ -253,6 +255,15 @@ export function Settings() {
   );
 }
 
+function AboutTile({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-2/40 px-3 py-2">
+      <dt className="text-[10.5px] uppercase tracking-[0.12em] text-muted">{label}</dt>
+      <dd className={`mt-0.5 truncate text-[12px] font-medium text-fg-soft ${mono ? 'font-mono' : ''}`}>{value}</dd>
+    </div>
+  );
+}
+
 function SectionTitle({ icon, title, hint }: { icon: React.ReactNode; title: string; hint: string }) {
   return (
     <div className="flex items-start gap-2.5">
@@ -267,12 +278,12 @@ function SectionTitle({ icon, title, hint }: { icon: React.ReactNode; title: str
 
 function Row({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+    <div className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
       <div className="min-w-0">
         <p className="text-[12.5px] font-medium text-fg">{title}</p>
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted">{description}</p>
       </div>
-      <div className="shrink-0 pt-0.5">{children}</div>
+      <div className="shrink-0 self-start pt-0.5 sm:self-auto">{children}</div>
     </div>
   );
 }

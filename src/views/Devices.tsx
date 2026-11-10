@@ -80,7 +80,7 @@ export function Devices({ onPair }: { onPair: () => void }) {
             }
           />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3">
             {devices.map((device) => {
               const isOnline = online.has(device.id);
               const link = linkStates[device.id] ?? 'idle';

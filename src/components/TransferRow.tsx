@@ -27,6 +27,7 @@ import { useState } from 'react';
 import type { TransferProgress } from '../lib/transfer';
 import { cn, downloadBlob, fileKind, formatBytes, formatDuration, formatSpeed, timeAgo } from '../lib/utils';
 import { ProgressBar } from './ui';
+import { useToasts } from './Toasts';
 
 const ICONS = {
   image: FileIcon,
@@ -84,6 +85,7 @@ export function TransferRow({
   const ratio = progress && progress.size > 0 ? progress.transferred / progress.size : record.status === 'completed' ? 1 : 0;
 
   const [preview, setPreview] = useState<string | null>(null);
+  const toasts = useToasts();
 
   const canSave = record.kind === 'file' && record.direction === 'in' && record.status === 'completed';
 
@@ -94,6 +96,8 @@ export function TransferRow({
       return;
     }
     downloadBlob(blob, record.name);
+    // Explicit confirmation: a silent download reads as "nothing happened".
+    toasts.push({ tone: 'success', title: t('xfer.savedToast'), body: record.name });
   };
 
   const openPreview = async () => {
@@ -187,7 +191,7 @@ export function TransferRow({
           <span className="hidden sm:inline">{statusLabel(record)}</span>
         </span>
 
-        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
+        <div className="flex items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
           {canSave ? (
             <IconAction label={t('xfer.save')} onClick={() => void download()}><Download className="size-3.5" /></IconAction>
           ) : null}

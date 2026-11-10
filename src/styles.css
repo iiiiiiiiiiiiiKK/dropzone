@@ -209,6 +209,37 @@ html.light {
   }
 }
 
+/* ---------- mobile refinements ---------- */
+@media (max-width: 640px) {
+  /* Keep the workspace readable: one column, tighter rhythm, no cramped 2-up grids. */
+  main {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  .card-shadow {
+    box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.03) inset, 0 16px 40px -30px rgba(0, 0, 0, 0.9);
+  }
+  /* 44px minimum touch target for icon-only controls. */
+  button[aria-label] {
+    min-height: 36px;
+    min-width: 36px;
+  }
+  /* Dialogs become bottom sheets with a grab handle. */
+  [role='dialog'] {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  [role='dialog']::before {
+    content: '';
+    display: block;
+    width: 42px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 999px;
+    background: var(--line-strong);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

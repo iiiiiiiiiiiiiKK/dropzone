@@ -52,7 +52,7 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t('hist.search')}
-              className="w-full bg-transparent text-[13px] outline-none placeholder:text-muted"
+              className="w-full min-w-0 bg-transparent text-[13px] outline-none placeholder:text-muted"
             />
           </div>
           <div className="flex flex-wrap items-center gap-1.5">

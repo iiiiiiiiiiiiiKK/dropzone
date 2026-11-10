@@ -66,7 +66,7 @@ export function TextComposer({ compact = false }: { compact?: boolean }) {
           }}
           rows={compact ? 3 : 4}
           placeholder={t('text.placeholder')}
-          className="w-full resize-none rounded-xl border border-line bg-surface-2/60 px-3 py-2.5 font-mono text-[12.5px] leading-relaxed text-fg outline-none transition-colors placeholder:text-muted focus:border-accent-line"
+          className="block w-full min-w-0 resize-none overflow-y-auto break-words rounded-xl border border-line bg-surface-2/60 px-3 py-2.5 font-mono text-[12.5px] leading-relaxed text-fg outline-none transition-colors placeholder:text-muted focus:border-accent-line"
         />
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <Button

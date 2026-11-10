@@ -82,7 +82,19 @@ html.light {
   }
   html {
     -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     scrollbar-color: var(--line-strong) transparent;
+  }
+  /* Touch devices: double-tap must not zoom the page (it reads as a layout jump). */
+  html {
+    touch-action: manipulation;
+  }
+  button,
+  a,
+  label,
+  [role='button'],
+  [role='switch'] {
+    touch-action: manipulation;
   }
   body {
     margin: 0;
@@ -121,6 +133,13 @@ html.light {
   button {
     font: inherit;
     color: inherit;
+  }
+  textarea,
+  input {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 }
 
@@ -206,6 +225,27 @@ html.light {
     to {
       background-position: -200% 0;
     }
+  }
+}
+
+/* ---------- iOS form-control zoom guard ----------
+ * iOS Safari auto-zooms the page when a focused <input>/<textarea>/<select>
+ * renders below 16px, which then never zooms back out. Every control in the app
+ * uses a compact 12–13px size, so on touch devices we force 16px while keeping
+ * the visual rhythm by tightening letter-spacing and padding instead.        */
+@media (hover: none), (pointer: coarse), (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']),
+  textarea,
+  select {
+    font-size: 16px;
+    line-height: 1.45;
+    letter-spacing: -0.01em;
+  }
+  /* Keep compact controls compact: the extra size is absorbed by padding. */
+  input:not([type='checkbox']):not([type='radio']),
+  select {
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
   }
 }
 

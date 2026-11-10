@@ -86,6 +86,7 @@
 - 顶栏四个按钮统一为 36px 方形：**拍照**、**截图工具**、**语言（中文/EN）**、**主题（深/浅）**，外加右侧的作者 𝕏 入口。
 - 首屏标题为「**个人传输中心**」，移动端底部导航为「传输 / 历史 / 收藏 / 设备 / 设置」。
 - 移动端独立适配：单列卡片、底部抽屉式弹窗、带抓手的拖拽条、≥36px 触控目标、安全区内边距，设置页的开关与按钮在 iPhone 上右对齐且不会错位。
+- **输入不再撑大页面**：所有输入框/文本域/下拉在触屏设备上强制 16px 字号（iOS 低于 16px 会自动放大整页且不再缩回），并关闭双击缩放、长串无空格文本自动换行——打字、粘贴长链接、粘贴 base64 都不会再让页面「变大」。
 - 全站中文与英文实时切换，无需刷新，选择保存在本机。
 
 ### 截图
@@ -271,7 +272,7 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 - 💾 **Storage usage + export/clear** — see quota usage, export a JSON snapshot, clear history on demand.
 - 🌗 **Theme switch** — dark by default, light option persisted per device.
 - 🌐 **Bilingual UI** — English and 简体中文, switchable from the top bar (𝕏 / 🌐 button) or Settings without reloading; the choice is stored per device and the whole interface — buttons, dialogs, toasts, transfer states and relative timestamps — follows it.
-- 📱 **Responsive layout** — desktop workbench with sidebar, right device rail and history table; mobile layout with bottom navigation and safe-area insets.
+- 📱 **Responsive layout** — desktop workbench with sidebar, right device rail and history table; mobile layout with bottom navigation and safe-area insets. Form controls render at 16 px on touch devices so iOS never zooms the page on focus, double-tap zoom is disabled, and long unbroken strings wrap instead of widening the layout.
 - 📲 **Installable PWA** — manifest, service worker shell cache, standalone window.
 
 ## Screenshots

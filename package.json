@@ -25,6 +25,7 @@
     "dexie": "^4.0.11",
     "framer-motion": "^12.23.12",
     "jsqr": "^1.4.0",
+    "jszip": "^3.10.2",
     "lucide-react": "^0.544.0",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",

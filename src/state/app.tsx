@@ -64,6 +64,8 @@ type AppContextValue = {
   paths: Record<string, LinkPath>;
   verified: Record<string, boolean>;
   queue: QueueItem[];
+  inbox: Array<{ transferId: string; name: string; mime: string; at: number }>;
+  dismissInbox: (transferId: string) => void;
   pairToken: string | undefined;
   addFiles: (files: File[]) => Promise<void>;
   removeQueued: (id: string) => void;
@@ -124,6 +126,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [verified, setVerified] = useState<Record<string, boolean>>({});
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [session, setSession] = useState<{ key: number; pairToken?: string }>({ key: 0 });
+  const [inbox, setInbox] = useState<Array<{ transferId: string; name: string; mime: string; at: number }>>([]);
 
   const relayRef = useRef<RelayClient | null>(null);
   const meshRef = useRef<PeerMesh | null>(null);
@@ -263,6 +266,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           void pruneHistory(settingsRef.current.historyLimit);
         },
         onText: (record) => setTexts((current) => [record, ...current.filter((entry) => entry.id !== record.id)].slice(0, 100)),
+        onIncomingReady: (transferId, name, mime) => {
+          setInbox((current) => [{ transferId, name, mime, at: Date.now() }, ...current.filter((item) => item.transferId !== transferId)].slice(0, 6));
+        },
         onNotice: (notice) => {
           toasts.push({
             tone: notice.level,
@@ -346,6 +352,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const reconnectRelay = useCallback(() => {
     setSession((current) => ({ key: current.key + 1, pairToken: pairTokenRef.current }));
   }, []);
+
+  /* ---------- presence refresh ---------- */
+  // Presence is only pushed on connect/disconnect, so a peer that slept without a
+  // clean close would stay "offline" here. Re-announcing periodically forces the
+  // relay to re-broadcast the roster to every paired device.
+  useEffect(() => {
+    if (!identity) return;
+    const announce = () => {
+      if (document.visibilityState === 'hidden') return;
+      relayRef.current?.updatePresence(
+        settingsRef.current.deviceName || defaultDeviceName(deviceType),
+        deviceType,
+      );
+    };
+    const timer = setInterval(announce, 30_000);
+    return () => clearInterval(timer);
+  }, [identity, deviceType]);
 
   /* ---------- network awareness ---------- */
   useEffect(() => {
@@ -547,13 +570,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTransfers([]);
     setTexts([]);
     setProgress({});
+    setInbox([]);
     toasts.push({ tone: 'info', title: t('toast.cleared') });
   }, [toasts]);
+
+  const dismissInbox = useCallback((transferId: string) => {
+    setInbox((current) => current.filter((item) => item.transferId !== transferId));
+  }, []);
 
   const cancelTransfer = useCallback((id: string) => {
     engineRef.current?.cancel(id);
     toasts.push({ tone: 'info', title: t('toast.canceled') });
   }, [toasts]);
+
+  /* ---------- keep-awake + leave guard while transferring ---------- */
+  const activeCount = Object.values(progress).filter(
+    (entry) => entry.phase === 'sending' || entry.phase === 'receiving' || entry.phase === 'hashing' || entry.phase === 'verifying',
+  ).length;
+
+  useEffect(() => {
+    if (activeCount === 0) return;
+    let released = false;
+    let sentinel: { release: () => Promise<void> } | null = null;
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
+    };
+    if (nav.wakeLock?.request) {
+      nav.wakeLock
+        .request('screen')
+        .then((lock) => {
+          if (released) void lock.release();
+          else sentinel = lock;
+        })
+        .catch(() => undefined);
+    }
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = t('xfer.leaveGuard');
+      return t('xfer.leaveGuard');
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => {
+      released = true;
+      void sentinel?.release().catch(() => undefined);
+      window.removeEventListener('beforeunload', beforeUnload);
+    };
+  }, [activeCount]);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -580,6 +642,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       paths,
       verified,
       queue,
+      inbox,
+      dismissInbox,
       pairToken: session.pairToken,
       addFiles,
       removeQueued,
@@ -620,6 +684,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       paths,
       verified,
       queue,
+      inbox,
+      dismissInbox,
       session.pairToken,
       addFiles,
       removeQueued,

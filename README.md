@@ -93,6 +93,9 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 - 🧮 **SHA-256 integrity** — hash computed incrementally while streaming and compared on the receiving side; a mismatch is reported, not silently accepted.
 - ⏯️ **Resume inside a live session** — a dropped transfer restarts from the last acknowledged chunk offset while the session is alive.
 - 🔔 **Notification toasts** — connect, progress milestones, completion and failures.
+- 📥 **Arrival shelf** — every received file is listed for one click ("Save") instead of being buried in history; clicking a row in the history opens images in a viewer or saves the file, and a row whose bytes were pruned says so instead of doing nothing.
+- 🗜️ **Download ZIP** — batch-pack every received file from the history into one archive (the encoder is lazy-loaded, so it costs nothing until used).
+- 🔁 **Presence that self-heals** — heartbeat pings detect a dead relay socket and reconnect, and the app re-announces presence every 30 s so a sleeping phone shows up again without a manual refresh.
 
 **Local workspace**
 

@@ -108,6 +108,14 @@ const DICT: Record<string, [string, string]> = {
   'text.to': ['to {name}', '发送给 {name}'],
   'text.copy': ['Copy text', '复制文字'],
 
+  'inbox.title': ['Just arrived', '刚收到'],
+  'inbox.count': ['{n} file(s)', '{n} 个文件'],
+  'inbox.save': ['Save', '保存'],
+  'inbox.note': [
+    'Stored in this browser only. Saving copies it to your downloads folder — nothing is uploaded.',
+    '仅保存在本浏览器，点「保存」才会写入下载目录，全程不上传。',
+  ],
+
   // transfer row
   'xfer.sending': ['sending', '发送中'],
   'xfer.receiving': ['receiving', '接收中'],
@@ -124,6 +132,10 @@ const DICT: Record<string, [string, string]> = {
   'xfer.to': ['to {name}', '发送给 {name}'],
   'xfer.save': ['Save file', '保存文件'],
   'xfer.preview': ['Preview image', '预览图片'],
+  'xfer.leaveGuard': [
+    'A transfer is still running. Leaving now will interrupt it.',
+    '传输仍在进行，离开当前页面会中断它。',
+  ],
   'xfer.previewHint': ['click anywhere to close', '点击任意位置关闭'],
   'xfer.missing': ['File no longer cached', '文件已不在本地缓存'],
   'xfer.missingBody': [
@@ -203,6 +215,9 @@ const DICT: Record<string, [string, string]> = {
   'hist.text': ['Text', '文字'],
   'hist.favorites': ['Favorites', '收藏'],
   'hist.clear': ['Clear', '清空'],
+  'hist.zip': ['Download ZIP', '打包下载'],
+  'hist.zipEmpty': ['Nothing to pack yet', '暂无可打包的文件'],
+  'hist.zipDone': ['ZIP with {n} file(s) ready', '已打包 {n} 个文件'],
   'hist.emptyFavTitle': ['No favorites yet', '还没有收藏'],
   'hist.emptyTitle': ['No transfers yet', '还没有传输记录'],
   'hist.emptyFavDesc': ['Star a transfer to keep it pinned regardless of the retention limit.', '给传输记录加星标，可不受保留条数限制。'],

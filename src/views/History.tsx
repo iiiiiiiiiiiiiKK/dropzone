@@ -1,11 +1,14 @@
 import { motion } from 'framer-motion';
-import { ArrowDownLeft, Clock3, Search, Star, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, Clock3, Download, Search, Star, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { t } from '../lib/i18n';
 import { useApp } from '../state/app';
 import { useToasts } from '../components/Toasts';
 import { TransferRow } from '../components/TransferRow';
 import { Badge, Button, Card, Dialog, EmptyState } from '../components/ui';
+import { readFile } from '../lib/db';
+import { downloadBlob, formatBytes } from '../lib/utils';
+
 import { cn } from '../lib/utils';
 
 type Filter = 'all' | 'files' | 'text' | 'favorites';
@@ -24,6 +27,7 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
   const [filter, setFilter] = useState<Filter>(favoritesOnly ? 'favorites' : 'all');
   const [query, setQuery] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
+  const [zipping, setZipping] = useState(false);
 
   const active: Filter = favoritesOnly ? 'favorites' : filter;
 
@@ -66,6 +70,44 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
                   </button>
                 ))
               : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={zipping}
+              onClick={async () => {
+                const inbound = rows.filter((record) => record.kind === 'file' && record.direction === 'in' && record.status === 'completed');
+                if (inbound.length === 0) {
+                  toasts.push({ tone: 'warn', title: t('hist.zipEmpty') });
+                  return;
+                }
+                setZipping(true);
+                try {
+                  // Loaded on demand so the ZIP encoder never sits in the startup bundle.
+                  const { default: JSZip } = await import('jszip');
+                  const zip = new JSZip();
+                  let added = 0;
+                  for (const record of inbound) {
+                    const blob = await readFile(record.id);
+                    if (blob) {
+                      zip.file(record.name, blob);
+                      added += 1;
+                    }
+                  }
+                  if (added === 0) {
+                    toasts.push({ tone: 'warn', title: t('xfer.missing'), body: t('xfer.missingBody') });
+                    return;
+                  }
+                  const archive = await zip.generateAsync({ type: 'blob' });
+                  downloadBlob(archive, `dropzone-${new Date().toISOString().slice(0, 10)}.zip`);
+                  toasts.push({ tone: 'success', title: t('hist.zipDone', { n: added }), body: formatBytes(archive.size) });
+                } finally {
+                  setZipping(false);
+                }
+              }}
+              className="text-muted hover:text-fg"
+            >
+              <Download className="size-3.5" /> {t('hist.zip')}
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => setConfirmClear(true)} className="text-muted hover:text-err">
               <Trash2 className="size-3.5" /> {t('hist.clear')}
             </Button>

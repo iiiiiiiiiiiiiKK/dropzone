@@ -37,6 +37,8 @@ export type TransferEvents = {
   onRecord: (record: TransferRecord) => void;
   onText: (record: TextRecord) => void;
   onNotice: (notice: TransferNotice) => void;
+  /** Fired after a received file is verified and stored, so the UI can offer it. */
+  onIncomingReady?: (transferId: string, name: string, mime: string) => void;
   onPeerVerified: (deviceId: string, verified: boolean, publicKey?: string) => void;
   resolveDeviceName: (deviceId: string) => string;
   autoAccept: () => boolean;
@@ -375,6 +377,7 @@ export class TransferEngine {
         thumbnail: state.mime.startsWith('image/') ? blob.slice(0, Math.min(blob.size, 512 * 1024)) : undefined,
       });
       this.options.events.onNotice({ level: 'success', title: t('notice.complete'), body: state.name });
+      this.options.events.onIncomingReady?.(control.transferId, state.name, state.mime);
     } else {
       await db.transfers.update(control.transferId, { status: 'failed', error: `Checksum mismatch (${blob.size}/${state.size} bytes)` });
       this.options.events.onNotice({ level: 'error', title: t('notice.mismatch'), body: t('notice.mismatchBody', { name: state.name }) });

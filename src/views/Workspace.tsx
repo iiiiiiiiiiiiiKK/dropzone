@@ -8,6 +8,7 @@ import { useMediaQuery } from '../lib/useMediaQuery';
 import { useApp } from '../state/app';
 import { useToasts } from '../components/Toasts';
 import { DeviceChips, DeviceRail } from '../components/DeviceRail';
+import { InboxStrip } from '../components/InboxStrip';
 import { DropZone, QueuePanel } from '../components/DropZone';
 import { TextComposer } from '../components/TextComposer';
 import { TransferRow } from '../components/TransferRow';
@@ -74,6 +75,8 @@ export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) 
             ))}
           </div>
         ) : null}
+
+        <InboxStrip />
 
         <QueuePanel />
 

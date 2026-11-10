@@ -73,6 +73,27 @@ The peer leaves your roster and stops appearing as a quick-send target. Its publ
 
 ## Transfers and limits
 
+### A device shows "offline" even though it is awake. Why?
+
+Presence is push-based: the relay broadcasts a roster when a device connects or disconnects. A phone that was suspended can disappear without a clean close, so the client also sends a heartbeat ping every 20 s (two missed pongs force a reconnect) and re-announces its presence every 30 s, and it re-checks on `visibilitychange`/`focus`. If a device still looks offline, tap the relay pill in the top bar to force a reconnect.
+
+### I received a file, but clicking it does nothing.
+
+Received files live in IndexedDB and are pruned when the retention limit is exceeded. If the row is older than your limit, the bytes are gone: the app now tells you so instead of failing silently. Ask the other device to resend, or raise **Settings → History retention**.
+
+### Can I send from the computer to the phone?
+
+Yes, and it is symmetric: open the text card or press **Choose files** on either side, pick the paired device, and send. Both directions use the same data channel, the same 64 KiB chunking and the same SHA-256 verification. Recent builds also record outgoing text in history, so both sides see the same conversation.
+
+### Can I download everything at once?
+
+Yes — **History → Download ZIP** packs every completed inbound file into a single archive, the same behaviour as PairDrop's multi-file download. The ZIP encoder is loaded only when you use it.
+
+### Why does a transfer fail on mobile data while Wi-Fi works?
+
+Mobile carriers and CGNAT put both devices behind symmetric NAT, so a direct peer-to-peer path is often impossible and TURN is mandatory. The hosted relay mints short-lived Cloudflare TURN credentials (`GET /turn?device=…`) and hands them to the browser, so the fallback path works without you hosting anything. Self-hosted deployments get the same behaviour with `TURN_URLS` + `TURN_SECRET` (coturn) or `CF_TURN_KEY_ID` + `CF_TURN_API_TOKEN` (Cloudflare). The connection badge shows **TURN relay** when that path is used.
+
+
 ### Is there a maximum file size?
 
 No fixed ceiling in the client. The practical limits are the browser's IndexedDB quota and the memory needed to assemble the final `Blob`. Chunks stream into the `chunks` table as they arrive, so neither side holds the whole file in memory while transferring. Very large transfers on a device with little free space fail at the quota boundary — export and clear history first.

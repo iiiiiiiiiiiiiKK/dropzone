@@ -1,4 +1,4 @@
-const CACHE = 'dropzone-shell-v1';
+const CACHE = 'dropzone-shell-v2';
 const SHELL = ['./', './index.html', './favicon.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -19,6 +19,8 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // Runtime config and the manifest must always be fresh, never cached.
+  if (url.pathname.endsWith('/config.json') || url.pathname.endsWith('/manifest.webmanifest')) return;
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)

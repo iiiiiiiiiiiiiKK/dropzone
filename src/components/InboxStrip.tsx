@@ -24,6 +24,7 @@ export function InboxStrip() {
       return;
     }
     downloadBlob(blob, name);
+    toasts.push({ tone: 'success', title: t('xfer.savedToast'), body: name });
     dismissInbox(transferId);
   };
 

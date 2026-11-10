@@ -69,17 +69,26 @@ export class PeerMesh {
     // Whoever needs the channel offers, regardless of id ordering: a send can start
     // from either device. Simultaneous offers are resolved in handleSignal.
     let lastError: Error | null = null;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const link = this.getOrCreateLink(deviceId, true);
+    // Attempt 1: full ICE (host/srflx/relay). Attempt 2: ICE restart. Attempt 3:
+    // relay-only, which is what a carrier-grade NAT or an office firewall needs.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const link = this.getOrCreateLink(deviceId, true, attempt === 2);
       if (link.channel?.readyState === 'open') return link.channel;
+      if (attempt === 1 && link.pc.signalingState === 'stable') {
+        try {
+          link.pc.restartIce();
+        } catch {
+          /* older engines */
+        }
+      }
       if (link.pc.signalingState === 'stable') {
         await this.negotiate(link);
       }
       try {
-        return await this.waitForOpen(link, attempt === 0 ? 9_000 : 16_000);
+        return await this.waitForOpen(link, attempt === 2 ? 25_000 : 15_000);
       } catch (error) {
         lastError = error as Error;
-        trace('peer', 'handshake attempt failed', deviceId.slice(0, 8), lastError.message);
+        trace('peer', 'handshake attempt failed', deviceId.slice(0, 8), 'attempt', attempt + 1, lastError.message);
         this.close(deviceId);
       }
     }
@@ -192,10 +201,17 @@ export class PeerMesh {
     Array.from(this.links.keys()).forEach((deviceId) => this.close(deviceId));
   }
 
-  private getOrCreateLink(deviceId: string, initiator: boolean): Link {
+  private getOrCreateLink(deviceId: string, initiator: boolean, relayOnly = false): Link {
     const existing = this.links.get(deviceId);
     if (existing) return existing;
-    const pc = new RTCPeerConnection({ iceServers: this.iceServers, iceCandidatePoolSize: 2, bundlePolicy: 'max-bundle' });
+    const hasTurn = this.iceServers.some((server) => String(server.urls ?? '').includes('turn'));
+    const pc = new RTCPeerConnection({
+      iceServers: this.iceServers,
+      iceCandidatePoolSize: 2,
+      bundlePolicy: 'max-bundle',
+      // Never force relay without a TURN server, or gathering would yield nothing.
+      iceTransportPolicy: relayOnly && hasTurn ? 'relay' : 'all',
+    });
     const orphaned = this.orphanCandidates.get(deviceId);
     this.orphanCandidates.delete(deviceId);
     const link: Link = {

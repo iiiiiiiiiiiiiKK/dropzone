@@ -63,6 +63,8 @@ type AppContextValue = {
   linkStates: Record<string, LinkState>;
   paths: Record<string, LinkPath>;
   verified: Record<string, boolean>;
+  /** Relay roster OR an actually open link — a stale roster must not read as offline. */
+  isOnline: (deviceId: string) => boolean;
   queue: QueueItem[];
   inbox: Array<{ transferId: string; name: string; mime: string; at: number }>;
   dismissInbox: (transferId: string) => void;
@@ -673,6 +675,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       linkStates,
       paths,
       verified,
+      isOnline: (deviceId: string) =>
+        linkStates[deviceId] === 'connected' || peers.some((peer) => peer.id === deviceId && peer.online),
       queue,
       inbox,
       dismissInbox,

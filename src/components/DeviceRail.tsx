@@ -14,10 +14,8 @@ function DeviceGlyph({ type, className }: { type: string; className?: string }) 
 }
 
 export function DeviceRail({ onPair, className }: { onPair: () => void; className?: string }) {
-  const { devices, paths, sendFilesTo, unpair, peers } = useApp();
+  const { devices, paths, sendFilesTo, unpair, isOnline } = useApp();
   const [confirming, setConfirming] = useState<DeviceRecord | null>(null);
-
-  const onlineById = new Map(peers.map((peer) => [peer.id, peer.online]));
 
   return (
     <aside className={cn('flex flex-col gap-3', className)}>
@@ -25,7 +23,7 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
         <div>
           <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-muted">{t('rail.title')}</h2>
           <p className="mt-1 text-[11.5px] text-muted">
-            {t('rail.summary', { paired: devices.length, online: devices.filter((device) => onlineById.get(device.id)).length })}
+            {t('rail.summary', { paired: devices.length, online: devices.filter((device) => isOnline(device.id)).length })}
           </p>
         </div>
         <Button size="sm" variant="secondary" onClick={onPair}>
@@ -48,7 +46,7 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
       ) : (
         <ul className="flex flex-col gap-2">
           {devices.map((device) => {
-            const online = onlineById.get(device.id) ?? false;
+            const online = isOnline(device.id);
             const path = paths[device.id];
             return (
               <motion.li key={device.id} layout className="rounded-2xl border border-line bg-surface/70 p-3 transition-colors hover:border-line-strong">
@@ -134,8 +132,7 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
 }
 
 export function DeviceChips({ className }: { className?: string }) {
-  const { devices, peers } = useApp();
-  const online = new Set(peers.filter((peer) => peer.online).map((peer) => peer.id));
+  const { devices, isOnline } = useApp();
   if (devices.length === 0) return null;
   return (
     <div className={cn('flex gap-2 overflow-x-auto pb-1 no-scrollbar', className)}>
@@ -143,7 +140,7 @@ export function DeviceChips({ className }: { className?: string }) {
         <span key={device.id} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface-2/70 px-2.5 py-1 text-[11.5px] text-fg-soft">
           <DeviceGlyph type={device.type} className="size-3" />
           {device.name}
-          <StatusDot tone={online.has(device.id) ? 'ok' : 'muted'} />
+          <StatusDot tone={isOnline(device.id) ? 'ok' : 'muted'} />
         </span>
       ))}
     </div>

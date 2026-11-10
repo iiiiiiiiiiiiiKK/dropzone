@@ -242,7 +242,9 @@ export class RelayClient {
         const ice = (message.ice ?? { stun: [], turn: null }) as RelayIce;
         const peers = Array.isArray(message.peers) ? (message.peers as PeerInfo[]) : [];
         this.setState('online');
-        handlers.onReady?.({ ice, peers, maxFrameBytes: Number(message.limits ?? MAX_SIGNAL_FRAME) });
+        const limits = (message.limits ?? {}) as { maxFrameBytes?: number };
+        const maxFrameBytes = Number(limits.maxFrameBytes);
+        handlers.onReady?.({ ice, peers, maxFrameBytes: Number.isFinite(maxFrameBytes) ? maxFrameBytes : MAX_SIGNAL_FRAME });
         return;
       }
       case 'peers':

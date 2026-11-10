@@ -430,7 +430,7 @@ export class TransferEngine {
       await this.options.mesh.ensure(deviceId);
     } catch (error) {
       const message = (error as Error).message;
-      const hint = /timed out|Connection failed/i.test(message) ? t('notice.iceHint') : '';
+      const hint = /timed out|Connection failed|not ready/i.test(message) ? t('notice.iceHint') : '';
       throw new Error(hint ? `${message}. ${hint}` : message);
     }
     this.greet(deviceId);

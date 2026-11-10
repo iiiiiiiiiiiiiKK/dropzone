@@ -417,8 +417,8 @@ const DICT: Record<string, [string, string]> = {
   'notice.sendFailed': ['Transfer failed verification', '传输未通过校验'],
   'notice.failed': ['Transfer failed', '传输失败'],
   'notice.iceHint': [
-    'The devices could not find a common network path. Keep both sides online, and if you are on mobile data or a strict company/ISP network the relay needs TURN — this deployment now provides it.',
-    '两台设备找不到可用的网络通路。请保持两端都在线；如果你在移动数据、公司网络或严格的运营商 NAT 下，中继必须有 TURN 才能连通——本站已内置 TURN。',
+    'No common network path was found. Both devices retried direct, then relay-only. Keep both tabs open and try again — mobile data and strict office/ISP NAT need the TURN relay, which this deployment provides.',
+    '两端没有找到可用的网络通路（已自动依次尝试直连与纯中继）。请保持两个页面都在前台再试一次；移动数据、公司网络或严格的运营商 NAT 必须走 TURN 中继，本站已内置。',
   ],
   'notice.error': ['Transfer error', '传输出错'],
   'notice.declined': ['Incoming transfer declined', '已拒绝接收'],

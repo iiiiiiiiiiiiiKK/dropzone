@@ -12,10 +12,10 @@ function Glyph({ type, className }: { type: string; className?: string }) {
 }
 
 export function Devices({ onPair }: { onPair: () => void }) {
-  const { devices, identity, peers, settings, updateSettings, linkStates, paths, unpair, sendFilesTo, verified } = useApp();
+  const { devices, identity, peers, settings, updateSettings, linkStates, paths, unpair, sendFilesTo, verified, turnConfigured, isOnline } = useApp();
   const [name, setName] = useState(settings.deviceName);
   const [confirming, setConfirming] = useState<string | null>(null);
-  const online = new Set(peers.filter((peer) => peer.online).map((peer) => peer.id));
+
 
   return (
     <div className="space-y-4">
@@ -82,7 +82,7 @@ export function Devices({ onPair }: { onPair: () => void }) {
         ) : (
           <div className="grid gap-3">
             {devices.map((device) => {
-              const isOnline = online.has(device.id);
+              const onlineNow = isOnline(device.id);
               const link = linkStates[device.id] ?? 'idle';
               const path = paths[device.id];
               return (
@@ -94,8 +94,8 @@ export function Devices({ onPair }: { onPair: () => void }) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13.5px] font-semibold">{device.name}</p>
                       <p className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-muted">
-                        <StatusDot tone={isOnline ? 'ok' : 'muted'} pulse={isOnline} />
-                        {isOnline ? t('rail.online') : t('rail.lastSeen', { time: timeAgo(device.lastSeen) })}
+                        <StatusDot tone={onlineNow ? 'ok' : 'muted'} pulse={onlineNow} />
+                        {onlineNow ? t('rail.online') : t('rail.lastSeen', { time: timeAgo(device.lastSeen) })}
                       </p>
                     </div>
                     {verified[device.id] ? (
@@ -164,6 +164,8 @@ export function Devices({ onPair }: { onPair: () => void }) {
             {isSecureContext ? <Wifi className="size-3" /> : <WifiOff className="size-3" />} {isSecureContext ? t('dev.secure') : t('dev.insecure')}
           </Badge>
           <Badge>{peers.length === 1 ? t('dev.relayPeers', { n: peers.length }) : t('dev.relayPeersPlural', { n: peers.length })}</Badge>
+          <Badge tone={turnConfigured ? 'ok' : 'warn'}>{turnConfigured ? t('set.turnAvailable') : t('set.stunOnly')}</Badge>
+          <Badge tone={turnConfigured ? 'ok' : 'warn'}>{turnConfigured ? t('set.turnAvailable') : t('set.stunOnly')}</Badge>
         </div>
       </Card>
 

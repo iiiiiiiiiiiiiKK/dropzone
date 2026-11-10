@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
-import { ClipboardPaste, Copy, Send, Type } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Check, ClipboardPaste, Copy, Send, Type } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { t } from '../lib/i18n';
 import { useApp } from '../state/app';
 import { cn, copyText, formatBytes, timeAgo } from '../lib/utils';
@@ -11,6 +11,20 @@ export function TextComposer({ compact = false }: { compact?: boolean }) {
   const [value, setValue] = useState('');
   const [target, setTarget] = useState('');
   const [sending, setSending] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+  }, []);
+
+  const copy = async (id: string, value: string) => {
+    const ok = await copyText(value);
+    if (!ok) return;
+    setCopiedId(id);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopiedId(null), 1600);
+  };
 
   useEffect(() => {
     if (devices.length === 0) {
@@ -88,29 +102,65 @@ export function TextComposer({ compact = false }: { compact?: boolean }) {
         {target && linkStates[target] === 'connected' ? <p className="mt-2 text-[11px] text-ok">{t('text.live')}</p> : null}
       </div>
 
-      <div className="border-t border-line px-2 py-2">
+      <div className="border-t border-line bg-surface-2/20 px-2 pt-2 pb-2">
+        <div className="mb-1.5 flex items-center justify-between px-1.5">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted">{t('text.history')}</p>
+          <span className="text-[10px] text-muted tabular-nums">{texts.length}</span>
+        </div>
         {texts.length === 0 ? (
           <p className="px-2 py-3 text-center text-[11.5px] text-muted">{t('text.empty')}</p>
         ) : (
-          <ul className="max-h-56 space-y-1 overflow-y-auto px-1">
-            {texts.slice(0, 12).map((text) => (
-              <motion.li key={text.id} layout className={cn('group flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2/70')}>
-                <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-fg-soft">{text.content}</p>
-                  <p className="mt-0.5 text-[10px] text-muted">
-                    {text.direction === 'in' ? t('text.from', { name: text.deviceName }) : t('text.to', { name: text.deviceName })} · {timeAgo(text.createdAt)} ·{' '}
-                    {formatBytes(new Blob([text.content]).size)}
-                  </p>
-                </div>
-                <button
-                  onClick={() => void copyText(text.content)}
-                  aria-label={t('text.copy')}
-                  className="rounded-md p-1 text-muted opacity-60 transition hover:bg-surface-3 hover:text-fg group-hover:opacity-100"
+          <ul className="max-h-64 space-y-1.5 overflow-y-auto px-1 pb-1">
+            {texts.slice(0, 20).map((text) => {
+              const copied = copiedId === text.id;
+              return (
+                <motion.li
+                  key={text.id}
+                  layout
+                  className={cn(
+                    'group relative flex items-start gap-2 rounded-xl border px-2.5 py-2 transition-colors',
+                    text.direction === 'in'
+                      ? 'border-accent-line/60 bg-accent-soft/40 hover:bg-accent-soft/60'
+                      : 'border-line bg-surface-2/50 hover:bg-surface-2/80',
+                    copied && 'border-ok/50 bg-ok/10',
+                  )}
                 >
-                  <Copy className="size-3" />
-                </button>
-              </motion.li>
-            ))}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'absolute inset-y-2 left-0 w-[2px] rounded-full',
+                      text.direction === 'in' ? 'bg-accent' : 'bg-line-strong',
+                    )}
+                  />
+                  <div className="min-w-0 flex-1 pl-1.5">
+                    <p className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-fg">{text.content}</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-[10px] text-muted">
+                      <span className={cn('inline-flex items-center gap-1 font-medium', text.direction === 'in' ? 'text-accent' : 'text-fg-soft')}>
+                        {text.direction === 'in' ? '↓' : '↑'}
+                        {text.direction === 'in' ? t('text.from', { name: text.deviceName }) : t('text.to', { name: text.deviceName })}
+                      </span>
+                      <span aria-hidden>·</span>
+                      <span>{timeAgo(text.createdAt)}</span>
+                      <span aria-hidden>·</span>
+                      <span>{formatBytes(new Blob([text.content]).size)}</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => void copy(text.id, text.content)}
+                    aria-label={copied ? t('text.copied') : t('text.copy')}
+                    title={copied ? t('text.copied') : t('text.copy')}
+                    className={cn(
+                      'grid size-7 shrink-0 place-items-center rounded-lg border transition-all',
+                      copied
+                        ? 'border-ok/40 bg-ok/15 text-ok'
+                        : 'border-transparent text-muted opacity-70 hover:border-line hover:bg-surface-3 hover:text-fg group-hover:opacity-100',
+                    )}
+                  >
+                    {copied ? <Check className="size-3.5" /> : <Copy className="size-3" />}
+                  </button>
+                </motion.li>
+              );
+            })}
           </ul>
         )}
       </div>

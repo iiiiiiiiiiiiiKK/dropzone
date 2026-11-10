@@ -138,6 +138,10 @@ const DICT: Record<string, [string, string]> = {
   'text.from': ['from {name}', '来自 {name}'],
   'text.to': ['to {name}', '发送给 {name}'],
   'text.copy': ['Copy text', '复制文字'],
+  'text.copied': ['Copied', '已复制'],
+  'text.history': ['Message history', '消息记录'],
+  'text.inbound': ['received', '收到'],
+  'text.outbound': ['sent', '已发送'],
 
   'incoming.title': ['Incoming transfer', '收到传输请求'],
   'incoming.desc': ['Auto-receive is off, so you decide before any bytes are sent.', '「自动接收」已关闭，传输开始前由你决定。'],

@@ -123,10 +123,12 @@ What DROPZONE is not: it is not a cloud drive, not a backup service, and not a f
 <p align="center"><em>Transfer history with favorites, and settings (theme, device name, retention, storage, relay URL).</em></p>
 
 <p align="center">
-  <img src="docs/screenshots/mobile-dark.png" alt="DROPZONE mobile layout with bottom navigation" width="260" />
+  <img src="docs/screenshots/mobile-dark.png" alt="DROPZONE mobile transfer screen with bottom navigation" width="248" />
+  <img src="docs/screenshots/mobile-history.png" alt="DROPZONE mobile transfer history" width="248" />
+  <img src="docs/screenshots/mobile-devices.png" alt="DROPZONE mobile device list" width="248" />
 </p>
 
-<p align="center"><em>Mobile layout — bottom tab bar, safe-area insets, same local history.</em></p>
+<p align="center"><em>Mobile layout at 393×852 — bottom tab bar, safe-area insets, touch-sized targets, same local history.</em></p>
 
 ## Architecture
 

@@ -1,5 +1,8 @@
 {
-  "_comment": "Runtime configuration, fetched before the app boots. Set signalUrl to your own relay; leave it empty to fall back to VITE_SIGNAL_URL, then wss://<this-host>/ws.",
-  "signalUrl": "wss://dropzone-signaling.changyuansex.workers.dev/ws",
-  "stunUrls": []
+  "_comment": "Runtime configuration, fetched before the app boots. Points at the self-hosted relay on cs.321.market.",
+  "signalUrl": "wss://cs.321.market/ws",
+  "stunUrls": [
+    "stun:stun.cloudflare.com:3478",
+    "stun:stun.l.google.com:19302"
+  ]
 }

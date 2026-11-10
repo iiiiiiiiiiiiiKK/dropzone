@@ -22,8 +22,9 @@ import {
 } from 'lucide-react';
 import type { TransferRecord } from '../lib/db';
 import { readFile } from '../lib/db';
+import { copyText } from '../lib/utils';
 import { t } from '../lib/i18n';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { TransferProgress } from '../lib/transfer';
 import { cn, downloadBlob, fileKind, formatBytes, formatDuration, formatSpeed, timeAgo } from '../lib/utils';
 import { ProgressBar } from './ui';
@@ -85,7 +86,20 @@ export function TransferRow({
   const ratio = progress && progress.size > 0 ? progress.transferred / progress.size : record.status === 'completed' ? 1 : 0;
 
   const [preview, setPreview] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toasts = useToasts();
+
+  const isText = record.kind === 'text';
+  const body = record.body ?? record.name;
+
+  const copyBody = async () => {
+    const ok = await copyText(body);
+    if (!ok) return;
+    setCopied(true);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 1600);
+  };
 
   const canSave = record.kind === 'file' && record.direction === 'in' && record.status === 'completed';
 
@@ -155,10 +169,22 @@ export function TransferRow({
             : undefined
         }
       >
-        <div className="flex items-center gap-2">
-          <p className={cn('truncate text-[13px] font-medium text-fg', canSave && 'hover:underline')}>{record.name}</p>
-          {record.favorite === 1 ? <Star className="size-3 shrink-0 fill-warn text-warn" /> : null}
-        </div>
+        {isText ? (
+          <div className="flex items-start gap-2">
+            <pre
+              className="max-h-[10lh] min-w-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-fg"
+              title={body}
+            >
+              {body}
+            </pre>
+            {record.favorite === 1 ? <Star className="mt-0.5 size-3 shrink-0 fill-warn text-warn" /> : null}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <p className={cn('truncate text-[13px] font-medium text-fg', canSave && 'hover:underline')}>{record.name}</p>
+            {record.favorite === 1 ? <Star className="size-3 shrink-0 fill-warn text-warn" /> : null}
+          </div>
+        )}
         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-muted">
           <span>{formatBytes(record.size)}</span>
           <span aria-hidden>·</span>
@@ -195,6 +221,11 @@ export function TransferRow({
         </span>
 
         <div className="flex items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
+          {isText ? (
+            <IconAction label={copied ? t('text.copied') : t('text.copy')} onClick={() => void copyBody()}>
+              {copied ? <Check className="size-3.5 text-ok" /> : <Copy className="size-3.5" />}
+            </IconAction>
+          ) : null}
           {canSave ? (
             <IconAction label={t('xfer.save')} onClick={() => void download()}><Download className="size-3.5" /></IconAction>
           ) : null}

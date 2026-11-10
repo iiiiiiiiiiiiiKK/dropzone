@@ -188,6 +188,24 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 | 响应式检查 | 393×852、820×1180、1024×800、1440×940 | 无横向溢出、无控件裁切、字体正常加载、触控目标 ≥ 28 px |
 | 剪贴板 | 剪贴板中放图片后按 `Ctrl/Cmd+V` | 原始字节入队，显示缩略图、尺寸与大小，全程不上传 |
 
+### 自建部署（已上线）
+
+当前线上有两套同源部署，代码完全一致，只是中继地址不同：
+
+| 部署 | 前端 | 信令 | TURN |
+| --- | --- | --- | --- |
+| 公开演示 | GitHub Pages | Cloudflare Worker + Durable Object | Cloudflare Realtime TURN |
+| **自建** | **https://cs.321.market**（腾讯云 43.155.248.202，nginx + Let's Encrypt） | `wss://cs.321.market/ws`（systemd `dropzone-signal`，127.0.0.1:8799） | coturn（systemd `dropzone-turn`，3478/udp+tcp、49160–49200/udp） |
+
+自建部分的关键点：
+
+- **不改动宿主上已有服务**：只新增 `dropzone-signal` / `dropzone-turn` 两个 systemd 单元与一个 nginx vhost（`dropzone-cs.conf`），端口 8799（回环）、3478、49160–49200 与其他项目不冲突。
+- **TURN 凭证由服务端签发**：coturn 用 `use-auth-secret`，用户名为 `<过期时间戳>:<设备ID>`，凭证为 `HMAC-SHA1(secret, username)` 的 base64，1 小时过期；长期密钥只存在于服务器。
+- **HTTPS 由 certbot 自动续期**，`/ws` 走 nginx 的 WebSocket 升级，`/health`、`/turn`、`/config.json` 反代到本机信令。
+- **切换中继不需要重新构建前端**：改 `public/config.json` 的 `signalUrl` 即可。
+
+> ⚠️ TURN 需要额外在云厂商安全组放行 **3478/udp、3478/tcp、49160–49200/udp**；目前宿主机 iptables 没有拦截，但腾讯云安全组未放行，因此 `turn:` 端口从公网不可达。放行后无需改任何代码，浏览器会自动从「仅 STUN」切到「TURN 中继」。
+
 ### 连接失败的排查顺序
 
 1. **两端页面都保持在前台**。手机锁屏或切到后台后 WebRTC 会被系统挂起，页面必须在运行状态才能收数据。

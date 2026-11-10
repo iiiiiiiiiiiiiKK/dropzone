@@ -157,6 +157,7 @@ export class TransferEngine {
       completedAt: record.createdAt,
       status: 'completed',
       favorite: 0,
+      body: record.content,
     };
     await db.transfers.put(transferRecord);
     this.options.events.onRecord(transferRecord);
@@ -258,6 +259,7 @@ export class TransferEngine {
           completedAt: record.createdAt,
           status: 'completed',
           favorite: 0,
+          body: record.content,
         };
         await db.transfers.put(inboundRecord);
         this.options.events.onRecord(inboundRecord);

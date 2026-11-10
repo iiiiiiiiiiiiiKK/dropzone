@@ -39,6 +39,8 @@ export type TransferRecord = {
   favorite: number;
   error?: string;
   thumbnail?: Blob;
+  /** Full text body for kind === 'text'; `name` only carries a short preview. */
+  body?: string;
 };
 
 export type FileRecord = {

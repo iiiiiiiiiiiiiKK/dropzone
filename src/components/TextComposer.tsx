@@ -133,7 +133,7 @@ export function TextComposer({ compact = false }: { compact?: boolean }) {
                     )}
                   />
                   <div className="min-w-0 flex-1 pl-1.5">
-                    <p className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-fg">{text.content}</p>
+                    <pre className="max-h-[10lh] overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-fg">{text.content}</pre>
                     <p className="mt-1 flex items-center gap-1.5 text-[10px] text-muted">
                       <span className={cn('inline-flex items-center gap-1 font-medium', text.direction === 'in' ? 'text-accent' : 'text-fg-soft')}>
                         {text.direction === 'in' ? '↓' : '↑'}

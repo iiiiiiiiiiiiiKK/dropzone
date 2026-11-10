@@ -3,6 +3,7 @@ import { ArrowDownLeft, Clock3, Search, Star, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { t } from '../lib/i18n';
 import { useApp } from '../state/app';
+import { useToasts } from '../components/Toasts';
 import { TransferRow } from '../components/TransferRow';
 import { Badge, Button, Card, Dialog, EmptyState } from '../components/ui';
 import { cn } from '../lib/utils';
@@ -18,6 +19,8 @@ const FILTERS: Array<{ key: Filter; labelKey: string }> = [
 
 export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) {
   const { transfers, progress, toggleFavoriteTransfer, removeTransfer, cancelTransfer, clearHistory } = useApp();
+  const toasts = useToasts();
+  const reportMissing = () => toasts.push({ tone: 'warn', title: t('xfer.missing'), body: t('xfer.missingBody') });
   const [filter, setFilter] = useState<Filter>(favoritesOnly ? 'favorites' : 'all');
   const [query, setQuery] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
@@ -87,6 +90,7 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
                 onFavorite={() => void toggleFavoriteTransfer(record.id)}
                 onDelete={() => void removeTransfer(record.id)}
                 onCancel={() => cancelTransfer(record.id)}
+                    onMissingFile={reportMissing}
               />
             ))}
           </ul>

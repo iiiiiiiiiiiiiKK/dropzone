@@ -38,8 +38,10 @@ type Outgoing =
   | { t: 'signal'; to: string; data: SignalData }
   | { t: 'ping' };
 
-const HEARTBEAT_MS = 25_000;
+const HEARTBEAT_MS = 20_000;
 const MAX_BACKOFF_MS = 20_000;
+/** A socket that stops answering pings is dead even if the browser has not noticed. */
+const MAX_MISSED_PONGS = 2;
 
 export class RelayClient {
   private socket: WebSocket | null = null;
@@ -49,6 +51,8 @@ export class RelayClient {
   private manualClose = false;
   private state: RelayState = 'idle';
   private queued: string[] = [];
+  private missedPongs = 0;
+  private lastPongAt = 0;
 
   constructor(
     private readonly options: {
@@ -63,6 +67,10 @@ export class RelayClient {
 
   get currentState(): RelayState {
     return this.state;
+  }
+
+  get lastSeenPongAt(): number {
+    return this.lastPongAt;
   }
 
   private setState(state: RelayState, detail?: string): void {
@@ -145,7 +153,37 @@ export class RelayClient {
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
-    this.heartbeat = setInterval(() => this.send({ t: 'ping' }), HEARTBEAT_MS);
+    this.missedPongs = 0;
+    this.lastPongAt = Date.now();
+    this.heartbeat = setInterval(() => {
+      if (this.missedPongs > MAX_MISSED_PONGS) {
+        // The relay stopped answering — force a reconnect instead of pretending to be online.
+        this.stopHeartbeat();
+        try {
+          this.socket?.close(4000, 'heartbeat timeout');
+        } catch {
+          /* already closed */
+        }
+        this.socket = null;
+        this.setState('reconnecting', 'Heartbeat lost');
+        this.scheduleReconnect();
+        return;
+      }
+      this.missedPongs += 1;
+      this.send({ t: 'ping' });
+    }, HEARTBEAT_MS);
+  }
+
+  /** Brings the socket back immediately, e.g. when a phone wakes from sleep. */
+  ensureConnected(): void {
+    if (this.manualClose) return;
+    if (this.state === 'online' && this.socket?.readyState === WebSocket.OPEN) return;
+    if (this.socket && (this.socket.readyState === WebSocket.CONNECTING)) return;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.connect();
   }
 
   private stopHeartbeat(): void {
@@ -196,6 +234,10 @@ export class RelayClient {
     const handlers = this.options.handlers;
     trace('relay', '<-', String(message.t), message.t === 'signal' ? String(message.from).slice(0, 8) : '');
     switch (message.t) {
+      case 'pong':
+        this.missedPongs = 0;
+        this.lastPongAt = Date.now();
+        return;
       case 'ready': {
         const ice = (message.ice ?? { stun: [], turn: null }) as RelayIce;
         const peers = Array.isArray(message.peers) ? (message.peers as PeerInfo[]) : [];

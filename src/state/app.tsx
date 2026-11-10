@@ -342,20 +342,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [identity, signalUrl, deviceType, session.key, session.pairToken, toasts]);
 
-  /* ---------- network awareness ---------- */
-  useEffect(() => {
-    const onOnline = () => reconnectRelay();
-    const onOffline = () => setRelayState('offline');
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
-  }, []);
 
   const reconnectRelay = useCallback(() => {
     setSession((current) => ({ key: current.key + 1, pairToken: pairTokenRef.current }));
+  }, []);
+
+  /* ---------- network awareness ---------- */
+  useEffect(() => {
+    const onOnline = () => {
+      relayRef.current?.ensureConnected();
+      reconnectRelay();
+    };
+    const onOffline = () => setRelayState('offline');
+    // Phones freeze timers in the background; on wake the socket may be dead without
+    // a close event, so re-check liveness and re-establish the relay immediately.
+    const onWake = () => {
+      if (document.visibilityState === 'hidden') return;
+      relayRef.current?.ensureConnected();
+      const lastPong = relayRef.current?.lastSeenPongAt ?? 0;
+      if (relayRef.current?.currentState !== 'online' || Date.now() - lastPong > 45_000) {
+        reconnectRelay();
+      }
+    };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener('focus', onWake);
+    window.addEventListener('pageshow', onWake);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      document.removeEventListener('visibilitychange', onWake);
+      window.removeEventListener('focus', onWake);
+      window.removeEventListener('pageshow', onWake);
+    };
   }, []);
 
   /* ---------- queue ---------- */
@@ -439,7 +459,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       try {
         await engineRef.current?.sendText(deviceId, body);
-        toasts.push({ tone: 'success', title: t('toast.textSent') });
+        toasts.push({ tone: 'success', title: t('toast.textSent'), body: t('toast.textSentBody') });
       } catch (error) {
         toasts.push({ tone: 'error', title: t('toast.textFailed'), body: (error as Error).message });
       }

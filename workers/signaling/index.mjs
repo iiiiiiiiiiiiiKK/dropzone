@@ -87,8 +87,61 @@ function stunList(env) {
   return splitList(env.STUN_URLS, ['stun:stun.l.google.com:19302']);
 }
 
+/**
+ * Cloudflare Realtime TURN. When CF_TURN_KEY_ID + CF_TURN_API_TOKEN are set the
+ * Worker asks Cloudflare for short-lived ICE servers instead of signing coturn
+ * credentials. Nothing long-lived reaches the browser; the API token stays a
+ * Worker secret.
+ */
+const CF_TURN_ENDPOINT = 'https://rtc.live.cloudflare.com/v1/turn/keys';
+let cfTurnCache = null;
+
+async function cloudflareTurn(env, ttl) {
+  const keyId = env.CF_TURN_KEY_ID ? String(env.CF_TURN_KEY_ID).trim() : '';
+  const token = env.CF_TURN_API_TOKEN ? String(env.CF_TURN_API_TOKEN).trim() : '';
+  if (!keyId || !token) return null;
+  const now = Date.now();
+  if (cfTurnCache && cfTurnCache.expiresAt > now) return cfTurnCache.value;
+  const response = await fetch(CF_TURN_ENDPOINT + '/' + encodeURIComponent(keyId) + '/credentials/generate-ice-servers', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ttl }),
+  });
+  if (!response.ok) return null;
+  const payload = await response.json();
+  const servers = Array.isArray(payload && payload.iceServers) ? payload.iceServers : [];
+  const stun = [];
+  const turnUrls = [];
+  let username = '';
+  let credential = '';
+  for (const server of servers) {
+    const urls = Array.isArray(server.urls) ? server.urls : [server.urls].filter(Boolean);
+    const turnPart = urls.filter((url) => typeof url === 'string' && url.startsWith('turn'));
+    const stunPart = urls.filter((url) => typeof url === 'string' && url.startsWith('stun'));
+    stun.push(...stunPart);
+    if (turnPart.length && server.username) {
+      turnUrls.push(...turnPart);
+      username = server.username;
+      credential = server.credential;
+    }
+  }
+  if (!turnUrls.length) return null;
+  const value = { urls: turnUrls, username, credential, ttl, stun };
+  cfTurnCache = { value, expiresAt: now + Math.max(30, ttl - 120) * 1000 };
+  return value;
+}
+
+function turnConfigured(env) {
+  const cf = Boolean((env.CF_TURN_KEY_ID || '').trim() && (env.CF_TURN_API_TOKEN || '').trim());
+  const coturn = Boolean((env.TURN_SECRET || '').trim() && splitList(env.TURN_URLS, []).length);
+  return cf || coturn;
+}
+
 /** Protocol 1.4 — coturn static-auth-secret REST credentials, identical math to the Node server. */
 async function turnCredentials(env, deviceId) {
+  const ttlWanted = clamp(envInt(env.TURN_TTL_SECONDS, 3600), 60, 86400);
+  const cloudflare = await cloudflareTurn(env, ttlWanted);
+  if (cloudflare) return cloudflare;
   const urls = splitList(env.TURN_URLS, []);
   const secret = env.TURN_SECRET ? String(env.TURN_SECRET).trim() : '';
   if (!secret || !urls.length) return null;
@@ -128,7 +181,7 @@ export default {
       return jsonResponse(await turnCredentials(env, device), 200, corsHeaders(env, origin));
     }
     if (url.pathname === '/config.json') {
-      const configured = Boolean((env.TURN_SECRET || '').trim() && splitList(env.TURN_URLS, []).length);
+      const configured = turnConfigured(env);
       return jsonResponse(
         { signalUrl: signalUrlFor(request), rtc: { stun: stunList(env), turnConfigured: configured } },
         200,

@@ -32,6 +32,12 @@ TURN_USERNAME_PREFIX = ""
 # Comma-separated STUN URLs used when STUN_URLS is empty.
 STUN_URLS = "stun:stun.l.google.com:19302"
 TURN_TTL_SECONDS = "3600"
+# Cloudflare Realtime TURN key id (public identifier). The matching API token is a
+# Worker secret: wrangler secret put CF_TURN_API_TOKEN
+# When both are present the Worker mints short-lived Cloudflare ICE servers, which
+# makes cross-network (broadband <-> mobile, CGNAT, symmetric NAT) transfers work
+# without self-hosting coturn.
+CF_TURN_KEY_ID = "ac758c8d4b0a1072df5db89d058f0a42"
 PAIRING_TTL_SECONDS = "300"
 
 # Secrets are NOT set here. Use:

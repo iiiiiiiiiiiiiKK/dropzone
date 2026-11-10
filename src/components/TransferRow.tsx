@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -6,6 +6,7 @@ import {
   Check,
   Copy,
   Download,
+  Eye,
   File as FileIcon,
   FileArchive,
   FileAudio,
@@ -22,6 +23,7 @@ import {
 import type { TransferRecord } from '../lib/db';
 import { readFile } from '../lib/db';
 import { t } from '../lib/i18n';
+import { useState } from 'react';
 import type { TransferProgress } from '../lib/transfer';
 import { cn, downloadBlob, fileKind, formatBytes, formatDuration, formatSpeed, timeAgo } from '../lib/utils';
 import { ProgressBar } from './ui';
@@ -64,6 +66,7 @@ export function TransferRow({
   onDelete,
   onRetry,
   onCancel,
+  onMissingFile,
   compact = false,
 }: {
   record: TransferRecord;
@@ -72,6 +75,7 @@ export function TransferRow({
   onDelete?: () => void;
   onRetry?: () => void;
   onCancel?: () => void;
+  onMissingFile?: (record: TransferRecord) => void;
   compact?: boolean;
 }) {
   const kind = fileKind(record.name, record.mime);
@@ -79,9 +83,31 @@ export function TransferRow({
   const active = record.status === 'transferring' || record.status === 'queued' || record.status === 'verifying' || record.status === 'connecting';
   const ratio = progress && progress.size > 0 ? progress.transferred / progress.size : record.status === 'completed' ? 1 : 0;
 
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const canSave = record.kind === 'file' && record.direction === 'in' && record.status === 'completed';
+
   const download = async () => {
     const blob = await readFile(record.id);
-    if (blob) downloadBlob(blob, record.name);
+    if (!blob) {
+      onMissingFile?.(record);
+      return;
+    }
+    downloadBlob(blob, record.name);
+  };
+
+  const openPreview = async () => {
+    const blob = await readFile(record.id);
+    if (!blob) {
+      onMissingFile?.(record);
+      return;
+    }
+    if (fileKind(record.name, record.mime) === 'image') {
+      const url = URL.createObjectURL(blob);
+      setPreview(url);
+      return;
+    }
+    downloadBlob(blob, record.name);
   };
 
   return (
@@ -106,9 +132,24 @@ export function TransferRow({
         </span>
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div
+        className={cn('min-w-0 flex-1', canSave && 'cursor-pointer')}
+        onClick={canSave ? () => void openPreview() : undefined}
+        role={canSave ? 'button' : undefined}
+        tabIndex={canSave ? 0 : undefined}
+        onKeyDown={
+          canSave
+            ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  void openPreview();
+                }
+              }
+            : undefined
+        }
+      >
         <div className="flex items-center gap-2">
-          <p className="truncate text-[13px] font-medium text-fg">{record.name}</p>
+          <p className={cn('truncate text-[13px] font-medium text-fg', canSave && 'hover:underline')}>{record.name}</p>
           {record.favorite === 1 ? <Star className="size-3 shrink-0 fill-warn text-warn" /> : null}
         </div>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-muted">
@@ -147,8 +188,11 @@ export function TransferRow({
         </span>
 
         <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
-          {record.kind === 'file' && record.direction === 'in' && record.status === 'completed' ? (
-            <IconAction label={t('xfer.save')} onClick={download}><Download className="size-3.5" /></IconAction>
+          {canSave ? (
+            <IconAction label={t('xfer.save')} onClick={() => void download()}><Download className="size-3.5" /></IconAction>
+          ) : null}
+          {canSave && fileKind(record.name, record.mime) === 'image' ? (
+            <IconAction label={t('xfer.preview')} onClick={() => void openPreview()}><Eye className="size-3.5" /></IconAction>
           ) : null}
           {onFavorite ? (
             <IconAction label={record.favorite === 1 ? t('xfer.unfavorite') : t('xfer.favorite')} onClick={onFavorite}>
@@ -166,6 +210,31 @@ export function TransferRow({
           ) : null}
         </div>
       </div>
+
+      <AnimatePresence>
+        {preview ? (
+          <motion.div
+            className="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-6 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              URL.revokeObjectURL(preview);
+              setPreview(null);
+            }}
+          >
+            <motion.img
+              src={preview}
+              alt={record.name}
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="max-h-[85vh] max-w-full rounded-xl border border-white/15 object-contain shadow-2xl"
+            />
+            <p className="mt-3 text-[12px] text-white/70">{record.name} · {t('xfer.previewHint')}</p>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </motion.li>
   );
 }

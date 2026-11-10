@@ -139,6 +139,23 @@ export class TransferEngine {
     if (!sent) throw new Error('Connection is not ready');
     await db.texts.put(record);
     this.options.events.onText(record);
+    // A sent note is part of the local history just like a file, so record it.
+    const transferRecord: TransferRecord = {
+      id: `text-${record.id}`,
+      kind: 'text',
+      name: record.content.slice(0, 64),
+      mime: 'text/plain',
+      size: encoder.encode(record.content).byteLength,
+      direction: 'out',
+      deviceId,
+      deviceName: record.deviceName,
+      createdAt: record.createdAt,
+      completedAt: record.createdAt,
+      status: 'completed',
+      favorite: 0,
+    };
+    await db.transfers.put(transferRecord);
+    this.options.events.onRecord(transferRecord);
     return record;
   }
 
@@ -224,7 +241,7 @@ export class TransferEngine {
           favorite: 0,
         };
         await db.texts.put(record);
-        await db.transfers.put({
+        const inboundRecord: TransferRecord = {
           id: `text-${record.id}`,
           kind: 'text',
           name: record.content.slice(0, 64),
@@ -237,7 +254,9 @@ export class TransferEngine {
           completedAt: record.createdAt,
           status: 'completed',
           favorite: 0,
-        });
+        };
+        await db.transfers.put(inboundRecord);
+        this.options.events.onRecord(inboundRecord);
         this.options.events.onText(record);
         this.options.events.onNotice({ level: 'info', title: t('notice.text', { name: deviceName }), body: record.content.slice(0, 120) });
         return;
@@ -400,7 +419,13 @@ export class TransferEngine {
   }
 
   private async openChannel(deviceId: string): Promise<void> {
-    await this.options.mesh.ensure(deviceId);
+    try {
+      await this.options.mesh.ensure(deviceId);
+    } catch (error) {
+      const message = (error as Error).message;
+      const hint = /timed out|Connection failed/i.test(message) ? t('notice.iceHint') : '';
+      throw new Error(hint ? `${message}. ${hint}` : message);
+    }
     this.greet(deviceId);
   }
 
@@ -528,7 +553,14 @@ export class TransferEngine {
       if (failedRecord) this.options.events.onRecord(failedRecord);
       this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.CANCEL, { transferId: id, reason: message }));
       this.emitProgress({ id, deviceId, name, size: file.size, transferred: 0, speed: 0, etaSec: null, phase: 'failed', direction: 'out' });
-      if (status === 'failed') this.options.events.onNotice({ level: 'error', title: t('notice.failed'), body: message });
+      if (status === 'failed') {
+        const iceProblem = /timed out|Connection failed|not ready|channel closed/i.test(message);
+        this.options.events.onNotice({
+          level: 'error',
+          title: t('notice.failed'),
+          body: iceProblem ? `${message} — ${t('notice.iceHint')}` : message,
+        });
+      }
     } finally {
       this.pending.delete(id);
       this.cancelled.delete(id);

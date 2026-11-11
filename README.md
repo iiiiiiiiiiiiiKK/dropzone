@@ -188,6 +188,40 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 | 响应式检查 | 393×852、820×1180、1024×800、1440×940 | 无横向溢出、无控件裁切、字体正常加载、触控目标 ≥ 28 px |
 | 剪贴板 | 剪贴板中放图片后按 `Ctrl/Cmd+V` | 原始字节入队，显示缩略图、尺寸与大小，全程不上传 |
 
+### PWA 白屏与失败率排查（已修）
+
+**iOS 主屏幕 PWA 白屏**，根因有三个，都已修掉：
+
+1. **Service Worker 把坏的 HTML 存进了缓存**：旧实现用 `cache.addAll`，网络差时会缓存一个错误页；之后导航优先读缓存 → 永久白屏。
+   现在：导航请求**永远先走网络**（8 秒超时兜底），只有网络真失败才回退缓存；安装时逐条 `fetch({cache:'reload'})` 且只存 `ok` 的响应；激活时清空所有旧版本缓存。
+2. **启动阶段的异常没人接**：`main.tsx` 里如果 `config.json` 或 React 挂载抛错，页面就是纯白。
+   现在：`error` / `unhandledrejection` 兜底渲染一个「无法启动 / 重新加载」面板，点一下会**注销 SW + 清空 Cache Storage + 重载**，不用重装 App。
+3. **缺少 PNG 图标**：iOS 主屏幕图标只认 PNG，原来只有 SVG，安装后容易出现空白图标/异常。
+   现在：已生成 `icon-180/192/512.png` 并写进 manifest，`display_override`、`id` 一并补齐。
+
+**大文件失败率高（照片 / 视频）**，根因是一个真实的协议 bug：
+
+- 每个分块帧 = 5 字节头 + 1 字节 id 长度 + id + 4 字节序号 + 数据。原实现固定 64 KiB 数据，总帧长 **超出了 SCTP 单条消息 64 KiB 的上限**（Safari 尤其严格）。
+- 一旦超限，浏览器会**直接关闭 DataChannel**，于是你看到的正是 `The data channel closed during transfer`。
+- 小文件（文字、几十 KB）不会触发，所以「文字能发、视频失败」——完全对得上你观察到的现象。
+
+修复：
+- 新增 `PeerMesh.maxMessageSize()` 读取 `RTCDataChannel.sctp.maxMessageSize`，未声明时按 64 KiB 保守估计；
+- 发送端按 `(maxMessage - frameOverhead)` 向下取整到 4 KiB 对齐后再分块（实测 `chunkSize: 64512`，帧长正好在限内）；
+- 接收端新增**停摆看门狗**：25 秒收不到任何分块就判定失败并写回真实原因，不再永远停在「接收中」；
+- 发送端把 `channel closed` 映射成可读原因（切后台 / 网络切换），而不是抛原始英文。
+
+**实测（本机 Chromium ↔ iPhone 视口，经 cs.321.market 中继）**：
+
+| 文件大小 | 结果 | 落盘字节 |
+| --- | --- | --- |
+| 256 KB | completed | 262144 |
+| 2 MB | completed | 2097152 |
+| 8.6 MB（你失败的 `IMG_9489.mov` 同尺寸） | completed | 8600000 |
+| 12 MB | completed | 12582912 |
+
+修前同一个 8.6 MB 文件是 100% 失败。
+
 ### 自建部署（已上线）
 
 当前线上有两套同源部署，代码完全一致，只是中继地址不同：

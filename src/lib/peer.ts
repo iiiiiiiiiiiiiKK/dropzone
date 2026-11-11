@@ -167,6 +167,21 @@ export class PeerMesh {
     }
   }
 
+  /**
+   * Largest payload the peer's SCTP stack accepts in one message. iOS Safari caps
+   * this at 64 KiB, and a frame one byte over the cap closes the data channel —
+   * which is exactly why large files died mid-transfer on iPhone.
+   */
+  maxMessageSize(deviceId: string): number {
+    const channel = this.links.get(deviceId)?.channel as
+      | (RTCDataChannel & { sctp?: { maxMessageSize?: number } })
+      | undefined;
+    const declared = Number(channel?.sctp?.maxMessageSize ?? 0);
+    if (Number.isFinite(declared) && declared > 0) return declared;
+    // No declaration (Safari): assume the conservative 64 KiB SCTP default.
+    return 64 * 1024;
+  }
+
   bufferedAmount(deviceId: string): number {
     return this.links.get(deviceId)?.channel?.bufferedAmount ?? 0;
   }

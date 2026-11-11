@@ -183,6 +183,18 @@ const DICT: Record<string, [string, string]> = {
     '传输仍在进行，离开当前页面会中断它。',
   ],
   'xfer.previewHint': ['click anywhere to close', '点击任意位置关闭'],
+  'xfer.stalled': [
+    'The other device stopped responding mid-transfer. Keep both tabs in the foreground, then retry.',
+    '对方设备在传输中断开响应。请让两个页面都保持在前台再重试。',
+  ],
+  'xfer.channelClosed': [
+    'The connection dropped during transfer — usually the tab was backgrounded or the network switched.',
+    '传输过程中连接断开，通常是页面被切到后台或网络切换。',
+  ],
+  'xfer.tooLarge': [
+    'This file failed the size check on the other device.',
+    '该文件在对方设备上未通过大小校验。',
+  ],
   'xfer.missing': ['File no longer cached', '文件已不在本地缓存'],
   'xfer.missingBody': [
     'This record is older than the retention limit, so its bytes were pruned. Ask the other device to send it again.',

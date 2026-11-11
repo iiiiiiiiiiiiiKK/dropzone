@@ -1,5 +1,5 @@
 import { sha256 } from '@noble/hashes/sha256';
-import { CHUNK_SIZE } from './constants';
+import { CHUNK_SIZE, MIN_CHUNK_SIZE } from './constants';
 import { db, saveFile, type TextRecord, type TransferRecord } from './db';
 import { newNonce, sign, verify, type Identity } from './device';
 import { t } from './i18n';
@@ -11,6 +11,9 @@ import { randomId, safeFileName } from './utils';
 const ACCEPT_TIMEOUT_MS = 20_000;
 const VERIFY_TIMEOUT_MS = 120_000;
 const HASHLIB_PIECE = 4 * 1024 * 1024;
+/** How long a receiver tolerates silence before declaring the sender dead. */
+const STALL_TIMEOUT_MS = 25_000;
+const STALL_CHECK_MS = 5_000;
 
 export type TransferPhase = 'hashing' | 'waiting' | 'sending' | 'receiving' | 'verifying' | 'done' | 'failed';
 
@@ -67,6 +70,8 @@ type IncomingState = {
   buffer: Array<{ transferId: string; seq: number; data: ArrayBuffer }>;
   lastEmit: number;
   startedAt: number;
+  lastChunkAt: number;
+  watchdog?: ReturnType<typeof setTimeout>;
 };
 
 const encoder = new TextEncoder();
@@ -310,6 +315,7 @@ export class TransferEngine {
       buffer: [],
       lastEmit: 0,
       startedAt: Date.now(),
+      lastChunkAt: Date.now(),
     };
     this.incoming.set(meta.transferId, state);
     const record: TransferRecord = {
@@ -328,7 +334,38 @@ export class TransferEngine {
     await db.transfers.put(record);
     this.options.events.onRecord(record);
     this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.ACCEPT, { transferId: meta.transferId, offset: 0 }));
+    this.armWatchdog(state);
     this.options.events.onNotice({ level: 'info', title: t('notice.incoming', { name: deviceName }), body: state.name });
+  }
+
+  /**
+   * Receivers must notice a dead sender. Safari closes the data channel without a
+   * close event reaching us in time, so a stall watchdog is the only reliable signal.
+   */
+  private armWatchdog(state: IncomingState): void {
+    if (state.watchdog) clearTimeout(state.watchdog);
+    state.watchdog = setTimeout(() => {
+      if (!this.incoming.has(state.id)) return;
+      const stalledFor = Date.now() - state.lastChunkAt;
+      if (stalledFor < STALL_TIMEOUT_MS) {
+        this.armWatchdog(state);
+        return;
+      }
+      trace('transfer', 'receiver stalled', { id: state.id, stalledFor, received: state.received, size: state.size });
+      void this.failTransfer(state.id, t('xfer.stalled'));
+      this.incoming.delete(state.id);
+      this.options.events.onProgress({
+        id: state.id,
+        deviceId: state.deviceId,
+        name: state.name,
+        size: state.size,
+        transferred: state.received,
+        speed: 0,
+        etaSec: null,
+        phase: 'failed',
+        direction: 'in',
+      });
+    }, STALL_CHECK_MS);
   }
 
   private async handleChunk(payload: Uint8Array): Promise<void> {
@@ -336,6 +373,7 @@ export class TransferEngine {
     if (!chunk) return;
     const state = this.incoming.get(chunk.id);
     if (!state) return;
+    state.lastChunkAt = Date.now();
     state.hasher.update(chunk.data);
     state.received += chunk.data.byteLength;
     state.nextSeq = chunk.seq + 1;
@@ -402,6 +440,8 @@ export class TransferEngine {
   }
 
   private async cleanupIncoming(transferId: string): Promise<void> {
+    const stale = this.incoming.get(transferId);
+    if (stale?.watchdog) clearTimeout(stale.watchdog);
     this.incoming.delete(transferId);
     await db.chunks.where('transferId').equals(transferId).delete();
   }
@@ -508,13 +548,24 @@ export class TransferEngine {
       if (accepted.kind === 'reject') throw new Error(accepted.reason === 'declined' ? 'Declined by the other device' : 'Transfer rejected');
       const offset = accepted.kind === 'accept' ? Math.max(0, Math.min(accepted.offset, file.size)) : 0;
 
-      let position = Math.floor(offset / CHUNK_SIZE) * CHUNK_SIZE;
-      let seq = Math.floor(position / CHUNK_SIZE);
+      // A chunk frame is 5 (header) + 1 (id length) + id + 4 (seq) + data.
+      // Safari's SCTP stack rejects anything over 64 KiB in one message and closes
+      // the channel, so the payload must be computed, not assumed.
+      const frameOverhead = 5 + 1 + encoder.encode(id).byteLength + 4;
+      const maxMessage = this.options.mesh.maxMessageSize(deviceId);
+      const chunkSize = Math.max(
+        MIN_CHUNK_SIZE,
+        Math.min(CHUNK_SIZE, Math.floor((maxMessage - frameOverhead) / 1024) * 1024),
+      );
+      trace('transfer', 'chunk budget', { maxMessage, frameOverhead, chunkSize, fileSize: file.size });
+
+      let position = Math.floor(offset / chunkSize) * chunkSize;
+      let seq = Math.floor(position / chunkSize);
       const startedAt = Date.now();
       let lastEmit = 0;
       while (position < file.size) {
         if (this.cancelled.has(id)) throw new Error('Canceled');
-        const end = Math.min(position + CHUNK_SIZE, file.size);
+        const end = Math.min(position + chunkSize, file.size);
         const data = new Uint8Array(await file.slice(position, end).arrayBuffer());
         await this.options.mesh.waitForDrain(deviceId);
         const ok = this.options.mesh.send(deviceId, encodeChunkFrame(id, seq, data));
@@ -563,11 +614,12 @@ export class TransferEngine {
       this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.CANCEL, { transferId: id, reason: message }));
       this.emitProgress({ id, deviceId, name, size: file.size, transferred: 0, speed: 0, etaSec: null, phase: 'failed', direction: 'out' });
       if (status === 'failed') {
-        const iceProblem = /timed out|Connection failed|not ready|channel closed/i.test(message);
+        const channelProblem = /data channel closed|channel closed/i.test(message);
+        const iceProblem = /timed out|Connection failed|not ready/i.test(message);
         this.options.events.onNotice({
           level: 'error',
           title: t('notice.failed'),
-          body: iceProblem ? `${message} — ${t('notice.iceHint')}` : message,
+          body: channelProblem ? t('xfer.channelClosed') : iceProblem ? `${message} — ${t('notice.iceHint')}` : message,
         });
       }
     } finally {

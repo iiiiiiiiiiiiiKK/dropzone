@@ -262,6 +262,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           void engineRef.current?.resumeOutgoing(deviceId).then((resumedId) => {
             if (resumedId) toasts.push({ tone: 'info', title: t('toast.resumed'), body: t('toast.resumedBody') });
           });
+          // The other side of the same coin: if WE were receiving when the link died,
+          // ask the peer to continue instead of waiting for a manual retry.
+          void engineRef.current?.requestResume(deviceId);
         },
         onClose: (deviceId) => setLinkStates((current) => ({ ...current, [deviceId]: 'disconnected' })),
         onMessage: (deviceId, data) => {

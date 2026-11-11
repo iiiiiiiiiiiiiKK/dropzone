@@ -18,6 +18,8 @@ export const FRAME = {
   TEXT: 9,
   PING: 10,
   PONG: 11,
+  /** Receiver → sender: "I still hold partial bytes, send the rest of <id>". */
+  RESUME: 12,
 } as const;
 
 export type FrameType = (typeof FRAME)[keyof typeof FRAME];

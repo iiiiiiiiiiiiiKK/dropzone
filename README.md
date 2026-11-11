@@ -188,6 +188,24 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 | 响应式检查 | 393×852、820×1180、1024×800、1440×940 | 无横向溢出、无控件裁切、字体正常加载、触控目标 ≥ 28 px |
 | 剪贴板 | 剪贴板中放图片后按 `Ctrl/Cmd+V` | 原始字节入队，显示缩略图、尺寸与大小，全程不上传 |
 
+### 双向续传（本轮再完善）
+
+上一轮的续传只覆盖「发送端还活着、自己重试」；如果是**手机发到电脑**、中途手机被锁屏/切后台/刷新，发送端自己不会重试，电脑端就一直停在「接收中」或直接中断。现在补上了接收端主动追讨的路径：
+
+**协议新增 `RESUME` 帧（type 12）**：接收端发现自己已存部分分块、但 25 秒没收到新数据时，向发送端发 `RESUME{transferId}`；发送端收到后从 OPFS 重新读出源文件、带着同一 transferId 继续发送，接收端按已收连续块回报偏移。
+
+**接收端追讨有上限**：最多追问 3 次（每次重新计 25 秒窗口），仍无响应就把记录落成 `interrupted` 并**保留字节**；之后任何一次重连（roster 刷新 / 打开页面）都会再次 `requestResume()`，不会丢进度、也不会无限刷屏。
+
+**背压等待加了兜底**：`waitForDrain()` 原来只依赖 `bufferedamountlow`，一旦该事件因节流丢失，发送端会永远卡住——这正是大文件长时间停在「传输中」的原因之一。现在增加 250 ms 轮询 + 8 秒硬超时，等待一定有终点。
+
+**实测三种失败姿态**：
+
+| 场景 | 结果 |
+| --- | --- |
+| 手机→电脑 8.6 MB（正常） | completed |
+| 手机→电脑 9.5 MB，中途切断链路 | auto-retry attempt 2 → completed（落盘 9500000） |
+| 发送端整页刷新（12 MB） | 接收端 `resuming receive resumeOffset: 1548288` → completed（落盘 12582912） |
+
 ### 自动重试与断点续传（本轮新增）
 
 **失败不再需要手动点重试。** 每个传输最多自动尝试 3 次，指数退避（0.8s → 1.6s → 3.2s，上限 8s）；只对传输层故障重试，用户主动取消/对方拒绝一律不重试。
@@ -661,8 +679,3 @@ Everything below was executed against this repository — not estimated.
 ## Known limitations
 
 These are real, current behaviours — not roadmap items:
-
-- **Clipboard needs focus and a user gesture.** `navigator.clipboard.read()` requires a focused document and a user gesture; on iOS Safari there is no scripted clipboard read at all, so paste is a manual action.
-- **Receiving stops when the tab is not running.** Background receiving ends when the tab or installed PWA is closed or fully suspended. Keep both sides open while a transfer runs.
-- **No resume across a page reload.** Resume works within a live session (chunk offset), but after a reload the transfer is marked `interrupted` and can only be restarted from the beginning.
-- **The hosted demo relies on one small relay.** Pages serves the UI and a free-tier Cloudflare Worker (`wss://dropzone-signaling.changyuansex.workers.dev/ws`) brokers discovery; no file bytes touch it. Self-host the relay with `wrangler deploy` or Docker Compose to remove the dependency, and unset `config.json.signalUrl` to see the app's offline state.

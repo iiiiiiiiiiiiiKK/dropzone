@@ -18,6 +18,8 @@ const STALL_TIMEOUT_MS = 25_000;
 const STALL_CHECK_MS = 5_000;
 /** Automatic attempts per transfer before giving up (transient channel drops heal here). */
 const MAX_SEND_ATTEMPTS = 3;
+/** How often a stalled receiver asks the sender to continue before parking the transfer. */
+const MAX_RESUME_ASKS = 3;
 
 export type TransferPhase = 'hashing' | 'waiting' | 'sending' | 'receiving' | 'verifying' | 'done' | 'failed';
 
@@ -76,6 +78,8 @@ type IncomingState = {
   startedAt: number;
   lastChunkAt: number;
   watchdog?: ReturnType<typeof setTimeout>;
+  /** How many times this receiver asked the peer to resume; capped to avoid a loop. */
+  resumeAsked?: number;
 };
 
 const encoder = new TextEncoder();
@@ -104,6 +108,8 @@ export class TransferEngine {
   private chunkSizes = new Map<string, number>();
   /** Transfer ids whose source bytes are held in OPFS. */
   private opfsIds = new Set<string>();
+  /** Transfers currently being pushed, to keep a RESUME from starting a second sender. */
+  private activeSends = new Set<string>();
 
   constructor(
     private readonly options: {
@@ -285,6 +291,13 @@ export class TransferEngine {
         this.options.events.onNotice({ level: 'info', title: t('notice.text', { name: deviceName }), body: record.content.slice(0, 120) });
         return;
       }
+      case FRAME.RESUME: {
+        // The receiver kept its partial chunks and is asking us to continue.
+        const control = decodeJsonFrame<{ transferId: string }>(frame.payload);
+        if (!control?.transferId) return;
+        void this.resumeToPeer(deviceId, control.transferId);
+        return;
+      }
       case FRAME.PING:
         this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.PONG, { ts: Date.now() }));
         return;
@@ -374,6 +387,18 @@ export class TransferEngine {
         return;
       }
       trace('transfer', 'receiver stalled', { id: state.id, stalledFor, received: state.received, size: state.size });
+      // Ask the sender to continue from what we already hold before declaring failure.
+      state.resumeAsked = (state.resumeAsked ?? 0) + 1;
+      const canAsk = state.resumeAsked <= MAX_RESUME_ASKS;
+      const asked = canAsk && this.options.mesh.send(state.deviceId, encodeJsonFrame(FRAME.RESUME, { transferId: state.id }));
+      if (asked) {
+        // Give the sender another full window to answer before asking again.
+        state.lastChunkAt = Date.now();
+        this.armWatchdog(state);
+        return;
+      }
+      // Nobody answered: park the transfer as interrupted (bytes are kept) so the
+      // next reconnect can request it again instead of losing the progress.
       void this.failTransfer(state.id, t('xfer.stalled'), true);
       this.incoming.delete(state.id);
       this.options.events.onProgress({
@@ -489,6 +514,47 @@ export class TransferEngine {
     this.options.events.onProgress(progress);
   }
 
+  /**
+   * Re-sends a transfer the peer is still holding partial data for. Called when the
+   * receiver asks (RESUME) — this is what rescues an inbound transfer whose sender
+   * was suspended, backgrounded or killed before its own retry loop finished.
+   */
+  async resumeToPeer(deviceId: string, transferId: string): Promise<boolean> {
+    const record = await db.transfers.get(transferId);
+    if (!record || record.direction !== 'out') return false;
+    const size = await sourceSize(transferId);
+    if (!size || size !== record.size) {
+      trace('transfer', 'resume requested but source is gone', { transferId });
+      return false;
+    }
+    if (this.activeSends.has(transferId)) return false;
+    const bytes = await readSourceSlice(transferId, 0, size);
+    const file = new File([bytes], record.name, { type: record.mime });
+    this.opfsIds.add(transferId);
+    trace('transfer', 'peer asked to resume', { transferId, size });
+    await this.sendOne(deviceId, file, transferId);
+    return true;
+  }
+
+  /** Asks the peer to re-send anything we still hold partial bytes for. */
+  async requestResume(deviceId: string): Promise<number> {
+    const ids = await this.interruptedInbound(deviceId);
+    let asked = 0;
+    for (const transferId of ids) {
+      if (this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.RESUME, { transferId }))) asked += 1;
+    }
+    if (asked > 0) trace('transfer', 'asked peer to resume', { deviceId: deviceId.slice(0, 8), asked });
+    return asked;
+  }
+
+  /** Interrupted inbound transfers, per peer, so a reconnecting link can ask for them. */
+  async interruptedInbound(deviceId: string): Promise<string[]> {
+    const records = await db.transfers.where('status').equals('interrupted').toArray();
+    return records
+      .filter((record) => record.direction === 'in' && record.deviceId === deviceId && record.kind === 'file')
+      .map((record) => record.id);
+  }
+
   /** Reads from the OPFS copy when one exists, otherwise straight from the File. */
   private async readRange(id: string, file: File, start: number, end: number): Promise<ArrayBuffer> {
     if (this.opfsIds.has(id)) {
@@ -572,6 +638,7 @@ export class TransferEngine {
     };
     await db.transfers.put(record);
     this.options.events.onRecord(record);
+    this.activeSends.add(id);
 
     // Persist the bytes for a reload-resume; no-op for small files.
     await this.stageSource(id, file);
@@ -705,6 +772,7 @@ export class TransferEngine {
     this.pending.delete(id);
     this.cancelled.delete(id);
     this.chunkSizes.delete(id);
+    this.activeSends.delete(id);
     return id;
   }
 

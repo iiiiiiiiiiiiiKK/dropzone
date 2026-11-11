@@ -15,6 +15,8 @@ export type PeerEvents = {
 };
 
 const CHANNEL_LABEL = 'dropzone.v1';
+/** Upper bound on a single backpressure wait; a stuck buffer must not hang a transfer. */
+const DRAIN_TIMEOUT_MS = 8_000;
 
 type Link = {
   id: string;
@@ -198,13 +200,36 @@ export class PeerMesh {
     return this.links.get(deviceId)?.channel?.bufferedAmount ?? 0;
   }
 
+  /**
+   * Resolves when the channel has room again.
+   *
+   * `bufferedamountlow` alone is not reliable: if a sender waits while the buffer is
+   * already below the threshold the event never fires, and a phone that throttles its
+   * JS timers (screen lock, background tab) can miss it entirely — which is what left
+   * large transfers parked in 'transferring' forever. A polling fallback plus a hard
+   * deadline makes the wait bounded.
+   */
   waitForDrain(deviceId: string): Promise<void> {
     const link = this.links.get(deviceId);
     const channel = link?.channel;
     if (!channel || channel.readyState !== 'open') return Promise.resolve();
     if (channel.bufferedAmount <= BUFFERED_LOW_THRESHOLD) return Promise.resolve();
     return new Promise((resolve) => {
-      link!.drainers.push(resolve);
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearInterval(poll);
+        clearTimeout(deadline);
+        resolve();
+      };
+      // Poll as a safety net for engines that drop the low-water event.
+      const poll = setInterval(() => {
+        if (!link.channel || link.channel.readyState !== 'open') return finish();
+        if (link.channel.bufferedAmount <= BUFFERED_LOW_THRESHOLD) finish();
+      }, 250);
+      const deadline = setTimeout(finish, DRAIN_TIMEOUT_MS);
+      link.drainers.push(finish);
     });
   }
 

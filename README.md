@@ -188,6 +188,29 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 | 响应式检查 | 393×852、820×1180、1024×800、1440×940 | 无横向溢出、无控件裁切、字体正常加载、触控目标 ≥ 28 px |
 | 剪贴板 | 剪贴板中放图片后按 `Ctrl/Cmd+V` | 原始字节入队，显示缩略图、尺寸与大小，全程不上传 |
 
+### 自动重试与断点续传（本轮新增）
+
+**失败不再需要手动点重试。** 每个传输最多自动尝试 3 次，指数退避（0.8s → 1.6s → 3.2s，上限 8s）；只对传输层故障重试，用户主动取消/对方拒绝一律不重试。
+
+**重试是真正的续传，不是重头再来。** 接收端保留已收分块（记录改为 `interrupted` 而不是删数据），重发 META 时按「连续块数」算出 `resumeOffset` 回给发送端；发送端从该偏移继续，且**分块大小按 transferId 钉住**，保证序号网格对齐。
+
+**直连优先（P2P first）。** 以前只要配了 TURN，Chrome 很容易就落在中继候选对上，于是「大文件基本走 TURN」。现在第一次尝试**只用 STUN、不含 TURN**（8 秒快失败），成功即为真 P2P；只有直连失败才升级到含 TURN 的全量 ICE，最后才是纯中继。实测本机首次连接 **519ms** 并稳定 `connected`。
+
+**实测（强制中途断链）**：
+
+```
+attempt 1  → 发送中被强制 closeLink
+auto-retry attempt:1, reason: The data channel closed during transfer, delay: 800
+attempt 2  → pinned chunkSize 64512
+receiver   → resuming receive  resumeOffset: 1548288 (24 blocks)
+sender     → resuming send     offset: 1548288
+result     → completed, 落盘 14680064 字节（14 MB，与源文件一致）
+```
+
+纯函数 `src/lib/resume.ts`（`contiguousOffset` / `retryDelayMs` / `isRetryable`）有 8 个单元测试覆盖：空传输、连续求和、遇缺口停止、乱序插入、非法 chunkSize、退避上限、可重试/不可重试判定。
+
+> 跨页面刷新的续传（OPFS 分块落盘）**尚未实现**：目前刷新后传输标记为 `interrupted`，需重新发起；会话内断线续传已经完整可用。
+
 ### PWA 白屏与失败率排查（已修）
 
 **iOS 主屏幕 PWA 白屏**，根因有三个，都已修掉：
@@ -219,6 +242,8 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 | 2 MB | completed | 2097152 |
 | 8.6 MB（你失败的 `IMG_9489.mov` 同尺寸） | completed | 8600000 |
 | 12 MB | completed | 12582912 |
+
+分块预算的计算已抽成纯函数 `computeChunkSize()` 并有 5 个单元测试覆盖（64 KiB 上限 → 64512、低上限收缩、不小于下限、无声明时回退、1 KiB 对齐）。
 
 修前同一个 8.6 MB 文件是 100% 失败。
 

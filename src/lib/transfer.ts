@@ -6,6 +6,7 @@ import { t } from './i18n';
 import { FRAME, computeChunkSize, decodeChunkFrame, decodeFrame, decodeJsonFrame, encodeChunkFrame, encodeJsonFrame } from './frame';
 import type { PeerMesh } from './peer';
 import { trace } from './log';
+import { contiguousOffset, isRetryable, retryDelayMs } from './resume';
 import { randomId, safeFileName } from './utils';
 
 const ACCEPT_TIMEOUT_MS = 20_000;
@@ -14,6 +15,8 @@ const HASHLIB_PIECE = 4 * 1024 * 1024;
 /** How long a receiver tolerates silence before declaring the sender dead. */
 const STALL_TIMEOUT_MS = 25_000;
 const STALL_CHECK_MS = 5_000;
+/** Automatic attempts per transfer before giving up (transient channel drops heal here). */
+const MAX_SEND_ATTEMPTS = 3;
 
 export type TransferPhase = 'hashing' | 'waiting' | 'sending' | 'receiving' | 'verifying' | 'done' | 'failed';
 
@@ -96,6 +99,8 @@ export class TransferEngine {
   private cancelled = new Set<string>();
   private helloSent = new Set<string>();
   private messageQueues = new Map<string, Promise<void>>();
+  /** Chunk size pinned per transfer id so a resumed attempt keeps the same seq grid. */
+  private chunkSizes = new Map<string, number>();
 
   constructor(
     private readonly options: {
@@ -233,6 +238,11 @@ export class TransferEngine {
       case FRAME.CANCEL: {
         const control = decodeJsonFrame<{ transferId: string; reason?: string }>(frame.payload);
         if (!control?.transferId) return;
+        if (control.reason === 'retry') {
+          // The sender is renegotiating; keep what we have so the retry resumes.
+          this.incoming.delete(control.transferId);
+          return;
+        }
         this.cancelled.add(control.transferId);
         await this.failTransfer(control.transferId, control.reason === 'canceled' ? 'canceled' : 'Canceled by the other device');
         return;
@@ -302,6 +312,14 @@ export class TransferEngine {
       this.options.events.onNotice({ level: 'warn', title: t('notice.declined'), body: t('notice.declinedBody') });
       return;
     }
+    // A retry re-sends META with the same transfer id. Anything already stored from
+    // the previous attempt is contiguous (the channel is ordered), so reporting its
+    // byte count lets the sender resume instead of starting over.
+    const stored = await db.chunks.where('transferId').equals(meta.transferId).toArray();
+    const resumeOffset = contiguousOffset(
+      stored.map((chunk) => ({ seq: chunk.seq, byteLength: chunk.data.byteLength })),
+      Number((meta as { chunkSize?: number }).chunkSize) || 0,
+    );
     const state: IncomingState = {
       id: meta.transferId,
       deviceId,
@@ -309,14 +327,15 @@ export class TransferEngine {
       mime: meta.mime || 'application/octet-stream',
       size: meta.size,
       expectedSha: meta.sha256 ?? '',
-      received: 0,
-      nextSeq: 0,
+      received: resumeOffset,
+      nextSeq: stored.length,
       hasher: sha256.create(),
       buffer: [],
       lastEmit: 0,
       startedAt: Date.now(),
       lastChunkAt: Date.now(),
     };
+    if (resumeOffset > 0) trace('transfer', 'resuming receive', { id: meta.transferId, resumeOffset, stored: stored.length });
     this.incoming.set(meta.transferId, state);
     const record: TransferRecord = {
       id: meta.transferId,
@@ -333,7 +352,7 @@ export class TransferEngine {
     };
     await db.transfers.put(record);
     this.options.events.onRecord(record);
-    this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.ACCEPT, { transferId: meta.transferId, offset: 0 }));
+    this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.ACCEPT, { transferId: meta.transferId, offset: resumeOffset }));
     this.armWatchdog(state);
     this.options.events.onNotice({ level: 'info', title: t('notice.incoming', { name: deviceName }), body: state.name });
   }
@@ -352,7 +371,7 @@ export class TransferEngine {
         return;
       }
       trace('transfer', 'receiver stalled', { id: state.id, stalledFor, received: state.received, size: state.size });
-      void this.failTransfer(state.id, t('xfer.stalled'));
+      void this.failTransfer(state.id, t('xfer.stalled'), true);
       this.incoming.delete(state.id);
       this.options.events.onProgress({
         id: state.id,
@@ -491,12 +510,13 @@ export class TransferEngine {
   private async sendOne(deviceId: string, file: File): Promise<string> {
     const id = randomId(12);
     const name = safeFileName(file.name || `pasted-${Date.now()}.png`);
+    const mime = file.type || 'application/octet-stream';
     const deviceName = this.options.events.resolveDeviceName(deviceId);
     const record: TransferRecord = {
       id,
       kind: 'file',
       name,
-      mime: file.type || 'application/octet-stream',
+      mime,
       size: file.size,
       direction: 'out',
       deviceId,
@@ -508,6 +528,7 @@ export class TransferEngine {
     await db.transfers.put(record);
     this.options.events.onRecord(record);
 
+    // Hash once: a retry must not re-read a multi-gigabyte file from disk.
     const startedHash = Date.now();
     const digest = await hashFile(file, (done) => {
       const elapsed = Math.max((Date.now() - startedHash) / 1000, 0.001);
@@ -524,113 +545,127 @@ export class TransferEngine {
       });
     });
 
-    try {
-      await this.openChannel(deviceId);
-      // Register the waiter BEFORE sending: the peer may answer within the same tick
-      // and an unregistered ACCEPT would be dropped, stalling the transfer.
-      const acceptPromise = this.waitFor(id, 'accept', ACCEPT_TIMEOUT_MS);
-      const sentMeta = this.options.mesh.send(
-        deviceId,
-        encodeJsonFrame(FRAME.META, { transferId: id, name, mime: file.type || 'application/octet-stream', size: file.size, sha256: digest, chunkSize: CHUNK_SIZE }),
-      );
-      if (!sentMeta) {
-        const pendingMeta = this.pending.get(id);
-        if (pendingMeta) {
-          clearTimeout(pendingMeta.timer);
-          this.pending.delete(id);
+    let lastError = 'Transfer failed';
+    let finished = false;
+    for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS && !finished; attempt += 1) {
+      try {
+        await this.openChannel(deviceId);
+
+        // The chunk size is pinned per transfer so a resumed attempt lines up with
+        // the sequence numbers the receiver already stored.
+        const pinned = this.chunkSizes.get(id);
+        const frameOverhead = 5 + 1 + encoder.encode(id).byteLength + 4;
+        const chunkSize = pinned ?? computeChunkSize(this.options.mesh.maxMessageSize(deviceId), frameOverhead, CHUNK_SIZE, MIN_CHUNK_SIZE);
+        this.chunkSizes.set(id, chunkSize);
+        trace('transfer', 'chunk budget', { attempt, pinned: Boolean(pinned), chunkSize, fileSize: file.size });
+
+        const acceptPromise = this.waitFor(id, 'accept', ACCEPT_TIMEOUT_MS);
+        const sentMeta = this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.META, { transferId: id, name, mime, size: file.size, sha256: digest, chunkSize }));
+        if (!sentMeta) {
+          const pendingMeta = this.pending.get(id);
+          if (pendingMeta) {
+            clearTimeout(pendingMeta.timer);
+            this.pending.delete(id);
+          }
+          throw new Error('Connection is not ready');
         }
-        throw new Error('Connection is not ready');
-      }
-      await db.transfers.update(id, { status: 'transferring', sha256: digest });
-      this.options.events.onRecord({ ...record, status: 'transferring', sha256: digest });
+        await db.transfers.update(id, { status: 'transferring', sha256: digest });
+        this.options.events.onRecord({ ...record, status: 'transferring', sha256: digest });
 
-      const accepted = await acceptPromise;
-      if (accepted.kind === 'reject') throw new Error(accepted.reason === 'declined' ? 'Declined by the other device' : 'Transfer rejected');
-      const offset = accepted.kind === 'accept' ? Math.max(0, Math.min(accepted.offset, file.size)) : 0;
+        const accepted = await acceptPromise;
+        if (accepted.kind === 'reject') throw new Error(accepted.reason === 'declined' ? 'Declined by the other device' : 'Transfer rejected');
+        const offset = accepted.kind === 'accept' ? Math.max(0, Math.min(accepted.offset, file.size)) : 0;
+        if (offset > 0) trace('transfer', 'resuming send', { attempt, offset });
 
-      // A chunk frame is 5 (header) + 1 (id length) + id + 4 (seq) + data.
-      // Safari's SCTP stack rejects anything over 64 KiB in one message and closes
-      // the channel, so the payload must be computed, not assumed.
-      const frameOverhead = 5 + 1 + encoder.encode(id).byteLength + 4;
-      const maxMessage = this.options.mesh.maxMessageSize(deviceId);
-      const chunkSize = computeChunkSize(maxMessage, frameOverhead, CHUNK_SIZE, MIN_CHUNK_SIZE);
-      trace('transfer', 'chunk budget', { maxMessage, frameOverhead, chunkSize, fileSize: file.size });
-
-      let position = Math.floor(offset / chunkSize) * chunkSize;
-      let seq = Math.floor(position / chunkSize);
-      const startedAt = Date.now();
-      let lastEmit = 0;
-      while (position < file.size) {
-        if (this.cancelled.has(id)) throw new Error('Canceled');
-        const end = Math.min(position + chunkSize, file.size);
-        const data = new Uint8Array(await file.slice(position, end).arrayBuffer());
-        await this.options.mesh.waitForDrain(deviceId);
-        const ok = this.options.mesh.send(deviceId, encodeChunkFrame(id, seq, data));
-        if (!ok) throw new Error('The data channel closed during transfer');
-        position = end;
-        seq += 1;
-        const now = Date.now();
-        if (now - lastEmit > 120 || position >= file.size) {
-          lastEmit = now;
-          const elapsed = Math.max((now - startedAt) / 1000, 0.001);
-          const speed = (position - offset) / elapsed;
-          this.emitProgress({
-            id,
-            deviceId,
-            name,
-            size: file.size,
-            transferred: position,
-            speed,
-            etaSec: speed > 0 ? (file.size - position) / speed : null,
-            phase: 'sending',
-            direction: 'out',
-          });
+        let position = Math.floor(offset / chunkSize) * chunkSize;
+        let seq = Math.floor(position / chunkSize);
+        const startedAt = Date.now();
+        let lastEmit = 0;
+        while (position < file.size) {
+          if (this.cancelled.has(id)) throw new Error('Canceled');
+          const chunkEnd = Math.min(position + chunkSize, file.size);
+          const data = new Uint8Array(await file.slice(position, chunkEnd).arrayBuffer());
+          await this.options.mesh.waitForDrain(deviceId);
+          const ok = this.options.mesh.send(deviceId, encodeChunkFrame(id, seq, data));
+          if (!ok) throw new Error('The data channel closed during transfer');
+          position = chunkEnd;
+          seq += 1;
+          const now = Date.now();
+          if (now - lastEmit > 120 || position >= file.size) {
+            lastEmit = now;
+            const elapsed = Math.max((now - startedAt) / 1000, 0.001);
+            const speed = (position - offset) / elapsed;
+            this.emitProgress({
+              id,
+              deviceId,
+              name,
+              size: file.size,
+              transferred: position,
+              speed,
+              etaSec: speed > 0 ? (file.size - position) / speed : null,
+              phase: 'sending',
+              direction: 'out',
+            });
+          }
         }
-      }
 
-      await db.transfers.update(id, { status: 'verifying' });
-      const verifyPromise = this.waitFor(id, 'verify', VERIFY_TIMEOUT_MS);
-      this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.DONE, { transferId: id, sha256: digest, size: file.size }));
-      const verification = await verifyPromise;
-      const ok = verification.kind === 'verify' && verification.ok;
-      await db.transfers.update(id, { status: ok ? 'completed' : 'failed', completedAt: ok ? Date.now() : undefined, error: ok ? undefined : 'Checksum mismatch' });
-      const finalRecord = await db.transfers.get(id);
-      if (finalRecord) this.options.events.onRecord(finalRecord);
-      this.emitProgress({ id, deviceId, name, size: file.size, transferred: file.size, speed: 0, etaSec: 0, phase: ok ? 'done' : 'failed', direction: 'out' });
-      this.options.events.onNotice({
-        level: ok ? 'success' : 'error',
-        title: ok ? t('notice.sent', { name: deviceName }) : t('notice.sendFailed'),
-        body: name,
-      });
-    } catch (error) {
-      const message = (error as Error).message;
-      const status = this.cancelled.has(id) ? 'canceled' : 'failed';
-      await db.transfers.update(id, { status, error: status === 'failed' ? message : undefined });
-      const failedRecord = await db.transfers.get(id);
-      if (failedRecord) this.options.events.onRecord(failedRecord);
-      this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.CANCEL, { transferId: id, reason: message }));
-      this.emitProgress({ id, deviceId, name, size: file.size, transferred: 0, speed: 0, etaSec: null, phase: 'failed', direction: 'out' });
-      if (status === 'failed') {
-        const channelProblem = /data channel closed|channel closed/i.test(message);
-        const iceProblem = /timed out|Connection failed|not ready/i.test(message);
-        this.options.events.onNotice({
-          level: 'error',
-          title: t('notice.failed'),
-          body: channelProblem ? t('xfer.channelClosed') : iceProblem ? `${message} — ${t('notice.iceHint')}` : message,
-        });
+        await db.transfers.update(id, { status: 'verifying' });
+        const verifyPromise = this.waitFor(id, 'verify', VERIFY_TIMEOUT_MS);
+        this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.DONE, { transferId: id, sha256: digest, size: file.size }));
+        const verification = await verifyPromise;
+        const ok = verification.kind === 'verify' && verification.ok;
+        if (!ok) throw new Error('Checksum mismatch');
+
+        await db.transfers.update(id, { status: 'completed', completedAt: Date.now(), error: undefined });
+        const finalRecord = await db.transfers.get(id);
+        if (finalRecord) this.options.events.onRecord(finalRecord);
+        this.emitProgress({ id, deviceId, name, size: file.size, transferred: file.size, speed: 0, etaSec: 0, phase: 'done', direction: 'out' });
+        this.options.events.onNotice({ level: 'success', title: t('notice.sent', { name: deviceName }), body: name });
+        finished = true;
+      } catch (error) {
+        lastError = (error as Error).message;
+        const cancelled = this.cancelled.has(id);
+        const retryable = !cancelled && isRetryable(lastError) && attempt < MAX_SEND_ATTEMPTS;
+        await db.transfers.update(id, { status: retryable ? 'queued' : cancelled ? 'canceled' : 'failed', error: retryable ? undefined : lastError });
+        const failedRecord = await db.transfers.get(id);
+        if (failedRecord) this.options.events.onRecord(failedRecord);
+        if (!retryable) {
+          // Tell the peer to stop, then surface why.
+          this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.CANCEL, { transferId: id, reason: lastError }));
+          this.emitProgress({ id, deviceId, name, size: file.size, transferred: 0, speed: 0, etaSec: null, phase: 'failed', direction: 'out' });
+          if (!cancelled) {
+            const channelProblem = /data channel closed|channel closed/i.test(lastError);
+            const iceProblem = /timed out|Connection failed|not ready/i.test(lastError);
+            this.options.events.onNotice({
+              level: 'error',
+              title: t('notice.failed'),
+              body: channelProblem ? t('xfer.channelClosed') : iceProblem ? `${lastError} — ${t('notice.iceHint')}` : lastError,
+            });
+          }
+          break;
+        }
+        // Retry: drop the stale channel so the next attempt negotiates a fresh path.
+        trace('transfer', 'auto-retry', { attempt, reason: lastError, delay: retryDelayMs(attempt) });
+        // No CANCEL here: it would make the peer discard the bytes it already stored,
+        // which is exactly what the resume depends on.
+        this.options.mesh.close(deviceId);
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs(attempt)));
       }
-    } finally {
-      this.pending.delete(id);
-      this.cancelled.delete(id);
     }
+    this.pending.delete(id);
+    this.cancelled.delete(id);
+    this.chunkSizes.delete(id);
     return id;
   }
 
-  private async failTransfer(transferId: string, reason: string): Promise<void> {
-    await db.transfers.update(transferId, { status: reason === 'canceled' ? 'canceled' : 'failed', error: reason });
+  private async failTransfer(transferId: string, reason: string, keepPartial = false): Promise<void> {
+    const status = reason === 'canceled' ? 'canceled' : keepPartial ? 'interrupted' : 'failed';
+    await db.transfers.update(transferId, { status, error: reason });
     const record = await db.transfers.get(transferId);
     if (record) this.options.events.onRecord(record);
-    await this.cleanupIncoming(transferId);
+    // Chunks survive an interruption so the sender's retry can resume from them.
+    if (!keepPartial) await this.cleanupIncoming(transferId);
+    else this.incoming.delete(transferId);
   }
 }
 

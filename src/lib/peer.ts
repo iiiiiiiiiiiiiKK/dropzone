@@ -43,7 +43,14 @@ export class PeerMesh {
 
   setIceServers(servers: RTCIceServer[]): void {
     this.iceServers = servers;
+    // Attempt 0 deliberately excludes TURN: Chrome happily settles on a relay
+    // candidate pair when TURN is configured, which silently doubles latency and
+    // burns relay bandwidth even when both peers could have talked directly.
+    this.directServers = servers.filter((server) => !String(server.urls ?? '').toLowerCase().includes('turn'));
   }
+
+  /** ICE servers without TURN, used for the direct-first attempt. */
+  private directServers: RTCIceServer[] = [];
 
   getLinkState(deviceId: string): LinkState {
     return this.links.get(deviceId)?.state ?? 'idle';
@@ -69,10 +76,12 @@ export class PeerMesh {
     // Whoever needs the channel offers, regardless of id ordering: a send can start
     // from either device. Simultaneous offers are resolved in handleSignal.
     let lastError: Error | null = null;
-    // Attempt 1: full ICE (host/srflx/relay). Attempt 2: ICE restart. Attempt 3:
-    // relay-only, which is what a carrier-grade NAT or an office firewall needs.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const link = this.getOrCreateLink(deviceId, true, attempt === 2);
+    // Attempt 1: STUN only — proves a real peer-to-peer path when one exists.
+    // Attempt 2: full ICE with TURN, which is what CGNAT and office firewalls need.
+    // Attempt 3: relay-only, the last resort that still works when UDP is filtered.
+    const hasTurn = this.iceServers.some((server) => String(server.urls ?? '').toLowerCase().includes('turn'));
+    for (let attempt = 0; attempt < (hasTurn ? 3 : 2); attempt += 1) {
+      const link = this.getOrCreateLink(deviceId, true, attempt === 2, attempt === 0);
       if (link.channel?.readyState === 'open') return link.channel;
       if (attempt === 1 && link.pc.signalingState === 'stable') {
         try {
@@ -85,7 +94,10 @@ export class PeerMesh {
         await this.negotiate(link);
       }
       try {
-        return await this.waitForOpen(link, attempt === 2 ? 25_000 : 15_000);
+        // Direct-first fails fast (8 s) so a relay attempt is not delayed; the
+        // TURN attempts get progressively more patience.
+        const budget = attempt === 0 ? (hasTurn ? 8_000 : 18_000) : attempt === 2 ? 25_000 : 15_000;
+        return await this.waitForOpen(link, budget);
       } catch (error) {
         lastError = error as Error;
         trace('peer', 'handshake attempt failed', deviceId.slice(0, 8), 'attempt', attempt + 1, lastError.message);
@@ -216,12 +228,13 @@ export class PeerMesh {
     Array.from(this.links.keys()).forEach((deviceId) => this.close(deviceId));
   }
 
-  private getOrCreateLink(deviceId: string, initiator: boolean, relayOnly = false): Link {
+  private getOrCreateLink(deviceId: string, initiator: boolean, relayOnly = false, directOnly = false): Link {
     const existing = this.links.get(deviceId);
     if (existing) return existing;
     const hasTurn = this.iceServers.some((server) => String(server.urls ?? '').includes('turn'));
+    const servers = directOnly && this.directServers.length > 0 ? this.directServers : this.iceServers;
     const pc = new RTCPeerConnection({
-      iceServers: this.iceServers,
+      iceServers: servers,
       iceCandidatePoolSize: 2,
       bundlePolicy: 'max-bundle',
       // Never force relay without a TURN server, or gathering would yield nothing.

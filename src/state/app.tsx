@@ -761,6 +761,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     void ice;
     (window as unknown as { __DROPZONE_DEBUG__?: () => unknown }).__DROPZONE_DEBUG__ = debug;
+    // Test-only surface, enabled by ?debug=1: lets an automated run sever a live
+    // link to prove that automatic retry and resume actually recover.
+    if (new URLSearchParams(window.location.search).has('debug')) {
+      (window as unknown as { __DROPZONE_TEST__?: unknown }).__DROPZONE_TEST__ = {
+        closeLink: (deviceId: string) => meshRef.current?.close(deviceId),
+      };
+    }
     return () => {
       delete (window as unknown as { __DROPZONE_DEBUG__?: () => unknown }).__DROPZONE_DEBUG__;
     };

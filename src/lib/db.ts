@@ -41,6 +41,10 @@ export type TransferRecord = {
   thumbnail?: Blob;
   /** Full text body for kind === 'text'; `name` only carries a short preview. */
   body?: string;
+  /** Outgoing transfers: the source bytes live in OPFS under this id, so a reload can resume. */
+  opfsStored?: boolean;
+  /** Bytes the peer confirmed before an interruption. */
+  resumeOffset?: number;
 };
 
 export type FileRecord = {
@@ -149,6 +153,8 @@ export async function deleteTransfer(id: string): Promise<void> {
     await db.files.delete(id);
     await db.chunks.where('transferId').equals(id).delete();
   });
+  const { dropSource } = await import('./opfs');
+  await dropSource(id);
 }
 
 export async function clearTransfers(): Promise<void> {
@@ -158,6 +164,9 @@ export async function clearTransfers(): Promise<void> {
     await db.chunks.clear();
     await db.texts.clear();
   });
+  // Leave no orphaned OPFS source copies behind after a wipe.
+  const { pruneSources } = await import('./opfs');
+  await pruneSources(new Set());
 }
 
 export async function saveFile(transferId: string, blob: Blob, size: number): Promise<void> {

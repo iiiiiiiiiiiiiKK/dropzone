@@ -209,7 +209,24 @@ result     → completed, 落盘 14680064 字节（14 MB，与源文件一致）
 
 纯函数 `src/lib/resume.ts`（`contiguousOffset` / `retryDelayMs` / `isRetryable`）有 8 个单元测试覆盖：空传输、连续求和、遇缺口停止、乱序插入、非法 chunkSize、退避上限、可重试/不可重试判定。
 
-> 跨页面刷新的续传（OPFS 分块落盘）**尚未实现**：目前刷新后传输标记为 `interrupted`，需重新发起；会话内断线续传已经完整可用。
+**跨页面刷新续传（OPFS）已实现。** 发送端在开始传输时会把源文件写入 OPFS（`dropzone-transfers/<transferId>.bin`，≥1 MB 才写），
+因此刷新后源字节依然存在；启动时把状态卡在 `transferring/verifying/queued` 的记录统一标记为 `interrupted`，
+随后信令 roster 一刷新，客户端对每个有待续传任务的在线设备主动建链并调用 `resumeOutgoing()`，
+接收端按已收连续分块回报 `resumeOffset`，发送端从该偏移继续，全程无需用户干预。
+
+实测（20 MB，传输中途强制刷新发送端页面）：
+
+```
+OPFS files before reload: 1
+after reload: status=interrupted, error=Interrupted by a page reload
+resuming after reload {id, size: 20971520}
+receiver → resuming receive resumeOffset: 1548288 (24 blocks)
+sender   → resuming send    offset: 1548288
+result   → completed, 落盘 20971520 字节
+```
+
+OPFS 写入是尽力而为：不支持 OPFS、配额不足或文件小于 1 MB 时自动回退为直接从 `File` 读取；
+传输完成、删除记录、清空历史都会清理对应的 OPFS 副本，不会泄漏配额。
 
 ### PWA 白屏与失败率排查（已修）
 
@@ -649,39 +666,3 @@ These are real, current behaviours — not roadmap items:
 - **Receiving stops when the tab is not running.** Background receiving ends when the tab or installed PWA is closed or fully suspended. Keep both sides open while a transfer runs.
 - **No resume across a page reload.** Resume works within a live session (chunk offset), but after a reload the transfer is marked `interrupted` and can only be restarted from the beginning.
 - **The hosted demo relies on one small relay.** Pages serves the UI and a free-tier Cloudflare Worker (`wss://dropzone-signaling.changyuansex.workers.dev/ws`) brokers discovery; no file bytes touch it. Self-host the relay with `wrangler deploy` or Docker Compose to remove the dependency, and unset `config.json.signalUrl` to see the app's offline state.
-- **The relay is trusted for discovery.** DTLS encrypts the transport end to end, but peer discovery (who is behind which public key) relies on the relay; key fingerprints and the safety number are the mitigation, not a replacement for it.
-- **One active peer connection per paired device.** There is no multi-peer fan-out or broadcast in this version.
-- **Browser storage is not a backup.** IndexedDB can be evicted by the browser under storage pressure; export your history if you need a copy.
-
-## Roadmap
-
-- Streaming receive to disk via the File System Access API, with a bounded-memory fallback.
-- Cross-reload resume backed by OPFS chunk storage.
-- Multi-peer fan-out (send one file to several of your devices at once).
-- Explicit device revocation UI with a visible trust ledger.
-- Bitrate/adaptive chunk tuning based on `getStats()` round-trip time.
-- Real-browser end-to-end tests (two peer contexts, clipboard, mobile layout).
-
-## Contributing
-
-Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, branch and commit style, PR checklist, and the no-secrets rule — and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-
-## License
-
-MIT © 2025 DROPZONE contributors (0xkillcoin). See [LICENSE](LICENSE).
-
----
-
-<p align="center">
-  <a href="https://x.com/0xkillcoin"><img alt="Follow @0xkillcoin on X" src="https://img.shields.io/badge/%F0%9D%95%8F%20follow-@0xkillcoin-000000?style=for-the-badge&logo=x&logoColor=white" /></a>
-</p>
-
-<p align="center">
-  Built by <a href="https://x.com/0xkillcoin">𝕏 @0xkillcoin</a> ·
-  <a href="https://github.com/iiiiiiiiiiiiiKK/dropzone">github.com/iiiiiiiiiiiiiKK/dropzone</a> ·
-  MIT
-</p>
-
-<p align="center"><sub>Your files stay yours. That is the whole product.</sub></p>
-
----

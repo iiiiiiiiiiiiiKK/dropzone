@@ -31,6 +31,8 @@ import { TransferEngine, type TransferProgress } from '../lib/transfer';
 import { buildPreview } from '../lib/clipboard';
 import { useToasts } from '../components/Toasts';
 import { setLanguage, t } from '../lib/i18n';
+import { trace } from '../lib/log';
+import { reconcileInterruptedTransfers } from '../lib/resume';
 import { isImageMime, randomId } from '../lib/utils';
 import { useTheme } from '../lib/theme';
 
@@ -175,6 +177,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deviceName: defaultDeviceName(detectDeviceType()),
         deviceType: detectDeviceType(),
       });
+      // A record still marked transferring at boot belongs to a page that is gone.
+      // Marking it interrupted makes it eligible for the OPFS/indexedDB resume pass.
+      await reconcileInterruptedTransfers();
       const [deviceList, transferList] = await Promise.all([listDevices(), recentTransfers(loadedSettings.historyLimit)]);
       const textList = await db.texts.orderBy('createdAt').reverse().limit(50).toArray();
       if (cancelled) return;
@@ -252,6 +257,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onOpen: (deviceId) => {
           setLinkStates((current) => ({ ...current, [deviceId]: 'connected' }));
           engineRef.current?.greet(deviceId);
+          // Reload-resume: an interrupted outgoing transfer resumes as soon as the
+          // peer is reachable again, without the user hunting for a retry button.
+          void engineRef.current?.resumeOutgoing(deviceId).then((resumedId) => {
+            if (resumedId) toasts.push({ tone: 'info', title: t('toast.resumed'), body: t('toast.resumedBody') });
+          });
         },
         onClose: (deviceId) => setLinkStates((current) => ({ ...current, [deviceId]: 'disconnected' })),
         onMessage: (deviceId, data) => {
@@ -348,6 +358,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onPeers: (list) => {
           setPeers(list);
           list.forEach((peer) => void refreshDevicesRef.current(peer));
+          // A reloaded tab has interrupted transfers but no live channel: open one
+          // to each resumable peer so resumeOutgoing() can pick the work back up.
+          void resumePendingTransfers(list.filter((peer) => peer.online).map((peer) => peer.id));
         },
         onPaired: (peer) => {
           pairTokenRef.current = undefined;
@@ -376,6 +389,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const reconnectRelay = useCallback(() => {
     setSession((current) => ({ key: current.key + 1, pairToken: pairTokenRef.current }));
   }, []);
+
+  const resumeAttempted = useRef<Set<string>>(new Set());
+
+  const resumePendingTransfers = useCallback(async (deviceIds: string[]) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const pending = await db.transfers.where('status').equals('interrupted').toArray();
+    const resumable = pending.filter((record) => record.direction === 'out' && record.opfsStored);
+    if (resumable.length === 0) return;
+    for (const deviceId of deviceIds) {
+      const forPeer = resumable.filter((record) => record.deviceId === deviceId);
+      if (forPeer.length === 0) continue;
+      // One attempt per peer per page load; a second failure must not loop.
+      if (resumeAttempted.current.has(deviceId)) continue;
+      resumeAttempted.current.add(deviceId);
+      try {
+        await meshRef.current?.ensure(deviceId);
+        // resumeOutgoing picks the record itself; loop so several pending files drain.
+        for (let i = 0; i < forPeer.length; i += 1) {
+          const resumedId = await engine.resumeOutgoing(deviceId);
+          if (!resumedId) break;
+          toasts.push({ tone: 'info', title: t('toast.resumed'), body: t('toast.resumedBody') });
+        }
+      } catch (error) {
+        trace('transfer', 'resume after reload failed', (error as Error).message);
+      }
+    }
+  }, [toasts]);
 
   /* ---------- presence refresh ---------- */
   // Presence is only pushed on connect/disconnect, so a peer that slept without a

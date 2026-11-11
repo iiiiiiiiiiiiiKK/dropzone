@@ -406,6 +406,8 @@ const DICT: Record<string, [string, string]> = {
   'toast.noDeviceBody': ['Pair a device first — scan its QR code from Devices.', '请先配对设备：在「我的设备」里扫描二维码。'],
   'toast.relayOfflineTitle': ['Relay offline', '中继离线'],
   'toast.relayOfflineBody': ['Reconnect the signaling relay before sending.', '发送前请先重连信令中继。'],
+  'toast.resumed': ['Transfer resumed', '已续传'],
+  'toast.resumedBody': ['Continuing from where the previous attempt stopped.', '从上次中断的位置继续。'],
   'toast.textSent': ['Text sent', '文字已发送'],
   'toast.textSentBody': ['Delivered over the live peer link and added to your history.', '已通过点对点链路送达，并写入本地历史。'],
   'toast.textFailed': ['Text not sent', '文字发送失败'],

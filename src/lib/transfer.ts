@@ -6,6 +6,7 @@ import { t } from './i18n';
 import { FRAME, computeChunkSize, decodeChunkFrame, decodeFrame, decodeJsonFrame, encodeChunkFrame, encodeJsonFrame } from './frame';
 import type { PeerMesh } from './peer';
 import { trace } from './log';
+import { dropSource, OPFS_MIN_SIZE, putSource, readSourceSlice, sourceSize } from './opfs';
 import { contiguousOffset, isRetryable, retryDelayMs } from './resume';
 import { randomId, safeFileName } from './utils';
 
@@ -101,6 +102,8 @@ export class TransferEngine {
   private messageQueues = new Map<string, Promise<void>>();
   /** Chunk size pinned per transfer id so a resumed attempt keeps the same seq grid. */
   private chunkSizes = new Map<string, number>();
+  /** Transfer ids whose source bytes are held in OPFS. */
+  private opfsIds = new Set<string>();
 
   constructor(
     private readonly options: {
@@ -486,6 +489,48 @@ export class TransferEngine {
     this.options.events.onProgress(progress);
   }
 
+  /** Reads from the OPFS copy when one exists, otherwise straight from the File. */
+  private async readRange(id: string, file: File, start: number, end: number): Promise<ArrayBuffer> {
+    if (this.opfsIds.has(id)) {
+      try {
+        return await readSourceSlice(id, start, end);
+      } catch {
+        this.opfsIds.delete(id);
+      }
+    }
+    return file.slice(start, end).arrayBuffer();
+  }
+
+  /** Persists the outgoing bytes so a page reload can still resume. Best effort. */
+  private async stageSource(id: string, file: File): Promise<void> {
+    if (file.size < OPFS_MIN_SIZE) return;
+    if (!(await putSource(id, file))) return;
+    this.opfsIds.add(id);
+    await db.transfers.update(id, { opfsStored: true });
+  }
+
+  /**
+   * Resumes an outgoing transfer that a reload interrupted. Returns the id, or
+   * null when nothing resumable is left (bytes pruned, size mismatch).
+   */
+  async resumeOutgoing(deviceId: string): Promise<string | null> {
+    const records = await db.transfers.where('status').equals('interrupted').toArray();
+    const candidate = records.find((record) => record.direction === 'out' && record.deviceId === deviceId && record.opfsStored);
+    if (!candidate) return null;
+    const size = await sourceSize(candidate.id);
+    if (!size || size !== candidate.size) {
+      await db.transfers.update(candidate.id, { status: 'failed', error: 'Stored source is gone' });
+      await dropSource(candidate.id);
+      return null;
+    }
+    const bytes = await readSourceSlice(candidate.id, 0, size);
+    const file = new File([bytes], candidate.name, { type: candidate.mime });
+    this.opfsIds.add(candidate.id);
+    trace('transfer', 'resuming after reload', { id: candidate.id, size });
+    await this.sendOne(deviceId, file, candidate.id);
+    return candidate.id;
+  }
+
   private async openChannel(deviceId: string): Promise<void> {
     try {
       await this.options.mesh.ensure(deviceId);
@@ -507,8 +552,8 @@ export class TransferEngine {
     });
   }
 
-  private async sendOne(deviceId: string, file: File): Promise<string> {
-    const id = randomId(12);
+  private async sendOne(deviceId: string, file: File, existingId?: string): Promise<string> {
+    const id = existingId ?? randomId(12);
     const name = safeFileName(file.name || `pasted-${Date.now()}.png`);
     const mime = file.type || 'application/octet-stream';
     const deviceName = this.options.events.resolveDeviceName(deviceId);
@@ -527,6 +572,9 @@ export class TransferEngine {
     };
     await db.transfers.put(record);
     this.options.events.onRecord(record);
+
+    // Persist the bytes for a reload-resume; no-op for small files.
+    await this.stageSource(id, file);
 
     // Hash once: a retry must not re-read a multi-gigabyte file from disk.
     const startedHash = Date.now();
@@ -584,7 +632,7 @@ export class TransferEngine {
         while (position < file.size) {
           if (this.cancelled.has(id)) throw new Error('Canceled');
           const chunkEnd = Math.min(position + chunkSize, file.size);
-          const data = new Uint8Array(await file.slice(position, chunkEnd).arrayBuffer());
+          const data = new Uint8Array(await this.readRange(id, file, position, chunkEnd));
           await this.options.mesh.waitForDrain(deviceId);
           const ok = this.options.mesh.send(deviceId, encodeChunkFrame(id, seq, data));
           if (!ok) throw new Error('The data channel closed during transfer');
@@ -616,7 +664,9 @@ export class TransferEngine {
         const ok = verification.kind === 'verify' && verification.ok;
         if (!ok) throw new Error('Checksum mismatch');
 
-        await db.transfers.update(id, { status: 'completed', completedAt: Date.now(), error: undefined });
+        await db.transfers.update(id, { status: 'completed', completedAt: Date.now(), error: undefined, opfsStored: false });
+        this.opfsIds.delete(id);
+        await dropSource(id);
         const finalRecord = await db.transfers.get(id);
         if (finalRecord) this.options.events.onRecord(finalRecord);
         this.emitProgress({ id, deviceId, name, size: file.size, transferred: file.size, speed: 0, etaSec: 0, phase: 'done', direction: 'out' });

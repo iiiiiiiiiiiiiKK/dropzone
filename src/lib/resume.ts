@@ -34,3 +34,20 @@ export function isRetryable(error: string): boolean {
   if (/canceled|declined|rejected/i.test(error)) return false;
   return /data channel closed|channel closed|timed out|Connection failed|not ready|did not answer|stalled|verification timed out/i.test(error);
 }
+/**
+ * Marks transfers that were still in flight when the page went away.
+ * Called once at boot; without it a reloaded tab shows a transfer "transferring"
+ * forever and the resume pass never sees it.
+ */
+export async function reconcileInterruptedTransfers(): Promise<number> {
+  const { db } = await import('./db');
+  const all = await db.transfers.toArray();
+  const stale = all.filter((record) => record.status === 'transferring' || record.status === 'verifying' || record.status === 'queued');
+  for (const record of stale) {
+    await db.transfers.update(record.id, {
+      status: 'interrupted',
+      error: record.error ?? 'Interrupted by a page reload',
+    });
+  }
+  return stale.length;
+}

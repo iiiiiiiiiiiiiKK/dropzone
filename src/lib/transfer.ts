@@ -3,7 +3,7 @@ import { CHUNK_SIZE, MIN_CHUNK_SIZE } from './constants';
 import { db, saveFile, type TextRecord, type TransferRecord } from './db';
 import { newNonce, sign, verify, type Identity } from './device';
 import { t } from './i18n';
-import { FRAME, decodeChunkFrame, decodeFrame, decodeJsonFrame, encodeChunkFrame, encodeJsonFrame } from './frame';
+import { FRAME, computeChunkSize, decodeChunkFrame, decodeFrame, decodeJsonFrame, encodeChunkFrame, encodeJsonFrame } from './frame';
 import type { PeerMesh } from './peer';
 import { trace } from './log';
 import { randomId, safeFileName } from './utils';
@@ -553,10 +553,7 @@ export class TransferEngine {
       // the channel, so the payload must be computed, not assumed.
       const frameOverhead = 5 + 1 + encoder.encode(id).byteLength + 4;
       const maxMessage = this.options.mesh.maxMessageSize(deviceId);
-      const chunkSize = Math.max(
-        MIN_CHUNK_SIZE,
-        Math.min(CHUNK_SIZE, Math.floor((maxMessage - frameOverhead) / 1024) * 1024),
-      );
+      const chunkSize = computeChunkSize(maxMessage, frameOverhead, CHUNK_SIZE, MIN_CHUNK_SIZE);
       trace('transfer', 'chunk budget', { maxMessage, frameOverhead, chunkSize, fileSize: file.size });
 
       let position = Math.floor(offset / chunkSize) * chunkSize;

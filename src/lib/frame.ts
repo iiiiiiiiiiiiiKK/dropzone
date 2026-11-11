@@ -61,6 +61,20 @@ export function decodeJsonFrame<T>(payload: Uint8Array): T | null {
   }
 }
 
+/**
+ * Picks a payload size that keeps the whole frame inside one SCTP message.
+ *
+ * A CHUNK frame is 5 (header) + 1 (id length) + id + 4 (seq) + data, so the data
+ * budget must subtract the frame overhead from the peer's maxMessageSize.
+ * Safari caps at 64 KiB and closes the channel when a frame exceeds it.
+ */
+export function computeChunkSize(maxMessageSize: number, frameOverhead: number, preferred: number, minimum: number): number {
+  const safeMax = Number.isFinite(maxMessageSize) && maxMessageSize > 0 ? maxMessageSize : 64 * 1024;
+  const budget = Math.floor((safeMax - frameOverhead) / 1024) * 1024;
+  if (!Number.isFinite(budget) || budget <= 0) return minimum;
+  return Math.max(minimum, Math.min(preferred, budget));
+}
+
 export function encodeChunkFrame(id: string, seq: number, data: Uint8Array): ArrayBuffer {
   const idBytes = encoder.encode(id);
   if (idBytes.byteLength > MAX_CHUNK_ID_LENGTH) throw new Error('Chunk transfer id is too long');

@@ -223,7 +223,7 @@ Index: `&id, createdAt, direction, favorite`.
 | `failed` | Transport error, digest mismatch after one retry, or timeout. | yes |
 | `rejected` | Receiver answered `REJECT`. | yes |
 | `canceled` | Either side sent `CANCEL`. | yes |
-| `interrupted` | Page reloaded or session ended mid-transfer; restartable, never silently resumed. | yes |
+| `interrupted` | Page reloaded or session ended mid-transfer. Bytes are retained and the transfer resumes automatically on the next reconnect. | no |
 
 ## Sequence: pairing a new device
 
@@ -269,14 +269,25 @@ Notes:
  │ ◀── VERIFY { ok } ───────────          │   completed / failed
 ```
 
-Resume detail: `ACCEPT.offset` is the last contiguous persisted chunk sequence. Within a live session the sender seeks to `offset * chunkSize` and continues; after a reload the row is marked `interrupted` instead, because chunk rows are discarded with the session.
+Resume detail: `ACCEPT.offset` is the byte offset covered by the contiguous prefix of persisted chunks.
+The sender seeks to `floor(offset / chunkSize) * chunkSize` and continues on the same grid.
+
+Across a reload, two independent paths converge on the same transfer id:
+
+1. **Sender reloads.** Boot marks in-flight rows `interrupted`; once the relay roster shows the peer
+   online, the client opens a channel and calls `resumeOutgoing()`, which streams the OPFS copy.
+2. **Receiver reloads.** The receiver keeps its chunks and, on reconnect, sends `RESUME` for each
+   `interrupted` inbound transfer; the sender answers by reopening the same transfer.
+
+Both paths are single-flight: `PeerMesh.ensure()` shares one handshake per peer and every resume
+claims its transfer id before the first `await`, so overlapping triggers cannot start two senders.
 
 ## Transfer tuning constants
 
 | Constant | Value | Used by |
 | --- | --- | --- |
-| `CHUNK_SIZE` | 64 KiB | `transfer.ts` |
-| `MIN_CHUNK_SIZE` | 16 KiB | `transfer.ts` adaptive step-down |
+| `CHUNK_SIZE` | 64 KiB | `transfer.ts` upper bound |
+| `MIN_CHUNK_SIZE` | 16 KiB | `transfer.ts` lower bound |
 | `MAX_BUFFERED_AMOUNT` | 8 MiB | Sender high-water mark |
 | `BUFFERED_LOW_THRESHOLD` | 1 MiB | `bufferedamountlow` resume point |
 | `MAX_SIGNAL_FRAME` | 32 KiB | Client frame guard; relay enforces the same ceiling |
@@ -307,7 +318,8 @@ Resume detail: `ACCEPT.offset` is the last contiguous persisted chunk sequence. 
 | --- | --- |
 | Chunk received | `chunks` row written, progress updated, no blob retained until the end. |
 | `VERIFY { ok: true }` | Chunks assembled into one `Blob`, written to `files`, chunk rows deleted, transfer → `completed`. |
-| Cancel / fail / interrupt | Chunk rows deleted; the transfer row is kept for history with its final status. |
+| Cancel / fail | Chunk rows deleted; the transfer row is kept for history with its final status. |
+| Interrupt | Chunk rows kept so the transfer can resume; the OPFS source is kept as well. |
 | Favorite | `favorite = 1`; excluded from pruning. |
 | Prune | Keeps favorites, trims non-favorites to `historyLimit`. |
 | Export | JSON snapshot of `devices`, `transfers`, `texts`, `settings` — never file blobs. |
@@ -329,4 +341,3 @@ Resume detail: `ACCEPT.offset` is the last contiguous persisted chunk sequence. 
 | Change relay limits | `server/index.mjs` env config, `docs/protocol.md` |
 | Change the edge relay | `workers/signaling/` — mirror the Node behaviour |
 | Restyle the shell | `src/styles.css` tokens, then `src/components/*` |
-

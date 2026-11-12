@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Laptop, Link2, Monitor, QrCode, Send, Smartphone, Tablet, Trash2, Unplug, Wifi } from 'lucide-react';
+import { Laptop, Link2, Monitor, QrCode, Send, ShieldAlert, Smartphone, Tablet, Trash2, Unplug, Wifi } from 'lucide-react';
 import { useState } from 'react';
 import type { DeviceRecord } from '../lib/db';
 import { pickFiles } from '../lib/clipboard';
@@ -14,7 +14,7 @@ function DeviceGlyph({ type, className }: { type: string; className?: string }) 
 }
 
 export function DeviceRail({ onPair, className }: { onPair: () => void; className?: string }) {
-  const { devices, paths, sendFilesTo, unpair, isOnline } = useApp();
+  const { devices, paths, sendFilesTo, unpair, isOnline, verified } = useApp();
   const [confirming, setConfirming] = useState<DeviceRecord | null>(null);
 
   return (
@@ -88,6 +88,11 @@ export function DeviceRail({ onPair, className }: { onPair: () => void; classNam
                   </button>
                 </div>
 
+                {verified[device.id] === false ? (
+                  <p className="mt-2 inline-flex items-center gap-1 rounded-lg border border-err/40 bg-err/10 px-2 py-1 text-[10.5px] font-medium text-err">
+                    <ShieldAlert className="size-3" /> {t('dev.untrusted')}
+                  </p>
+                ) : null}
                 {device.safetyNumber ? <p className="mt-2 font-mono text-[10px] tracking-[0.12em] text-muted">{t('rail.safety', { code: device.safetyNumber })}</p> : null}
               </motion.li>
             );

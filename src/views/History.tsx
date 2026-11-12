@@ -21,7 +21,7 @@ const FILTERS: Array<{ key: Filter; labelKey: string }> = [
 ];
 
 export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) {
-  const { transfers, progress, toggleFavoriteTransfer, removeTransfer, cancelTransfer, clearHistory } = useApp();
+  const { transfers, progress, toggleFavoriteTransfer, removeTransfer, cancelTransfer, clearHistory, retryTransfer } = useApp();
   const toasts = useToasts();
   const reportMissing = () => toasts.push({ tone: 'warn', title: t('xfer.missing'), body: t('xfer.missingBody') });
   const [filter, setFilter] = useState<Filter>(favoritesOnly ? 'favorites' : 'all');
@@ -132,7 +132,8 @@ export function History({ favoritesOnly = false }: { favoritesOnly?: boolean }) 
                 onFavorite={() => void toggleFavoriteTransfer(record.id)}
                 onDelete={() => void removeTransfer(record.id)}
                 onCancel={() => cancelTransfer(record.id)}
-                    onMissingFile={reportMissing}
+                onRetry={() => void retryTransfer(record.id)}
+                onMissingFile={reportMissing}
               />
             ))}
           </ul>

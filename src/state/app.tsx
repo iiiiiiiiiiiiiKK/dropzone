@@ -87,6 +87,7 @@ type AppContextValue = {
   refreshTransfers: () => Promise<void>;
   toggleFavoriteTransfer: (id: string) => Promise<void>;
   removeTransfer: (id: string) => Promise<void>;
+  retryTransfer: (id: string) => Promise<void>;
   cancelTransfer: (id: string) => void;
   clearHistory: () => Promise<void>;
   reconnectRelay: () => void;
@@ -127,9 +128,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [transfers, setTransfers] = useState<TransferRecord[]>([]);
   const [texts, setTexts] = useState<TextRecord[]>([]);
   const [progress, setProgress] = useState<Record<string, TransferProgress>>({});
+  /** Mirror of progress for callbacks that must not re-subscribe on every tick. */
+  const progressRef = useRef<Record<string, TransferProgress>>({});
+  progressRef.current = progress;
   const [linkStates, setLinkStates] = useState<Record<string, LinkState>>({});
   const [paths, setPaths] = useState<Record<string, LinkPath>>({});
   const [verified, setVerified] = useState<Record<string, boolean>>({});
+  /** Same idea for the peer-verification map read by the diagnostic hook. */
+  const verifiedRef = useRef<Record<string, boolean>>({});
+  verifiedRef.current = verified;
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [session, setSession] = useState<{ key: number; pairToken?: string }>({ key: 0 });
   const [inbox, setInbox] = useState<Array<{ transferId: string; name: string; mime: string; at: number }>>([]);
@@ -226,15 +233,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (peer: PeerInfo) => {
       if (!peer?.id) return;
       const existing = await db.devices.get(peer.id);
+      // The roster key comes from the relay and must never replace the key recorded at
+      // pairing time: that substitution is precisely the attack the pin exists to stop.
+      // It is only used to create the record when none is stored yet.
+      const pinned = existing?.publicKey ?? '';
+      const presented = peer.publicKey ?? '';
+      if (pinned && presented && pinned !== presented) {
+        trace('transfer', 'relay key differs from pin', { deviceId: peer.id.slice(0, 8) });
+        setVerified((current) => (current[peer.id] === false ? current : { ...current, [peer.id]: false }));
+      }
       const record: DeviceRecord = {
         id: peer.id,
         name: peer.name || existing?.name || 'Device',
         type: peer.type || existing?.type || 'desktop',
-        publicKey: peer.publicKey || existing?.publicKey || '',
+        publicKey: pinned || presented,
         pairedAt: existing?.pairedAt ?? Date.now(),
         lastSeen: Date.now(),
       };
-      if (record.publicKey && identityRef.current) {
+      if (existing?.safetyNumber) {
+        record.safetyNumber = existing.safetyNumber;
+      } else if (record.publicKey && identityRef.current) {
         record.safetyNumber = await safetyNumber(identityRef.current.publicKey, record.publicKey);
       }
       await upsertDevice(record);
@@ -266,7 +284,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // ask the peer to continue instead of waiting for a manual retry.
           void engineRef.current?.requestResume(deviceId);
         },
-        onClose: (deviceId) => setLinkStates((current) => ({ ...current, [deviceId]: 'disconnected' })),
+        onClose: (deviceId) => {
+          setLinkStates((current) => ({ ...current, [deviceId]: 'disconnected' }));
+          // A dropped link must re-greet on the next open, otherwise the peer never
+          // receives a fresh identity proof and its verification state goes stale.
+          engineRef.current?.resetHello(deviceId);
+        },
         onMessage: (deviceId, data) => {
           void engineRef.current?.handleMessage(deviceId, data);
         },
@@ -307,7 +330,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }
           }
         },
-        onPeerVerified: (deviceId, ok) => setVerified((current) => ({ ...current, [deviceId]: ok })),
+        onPeerVerified: (deviceId, ok) => {
+          setVerified((current) => {
+            // Only warn on a transition: a HELLO repeats on every reconnect.
+            if (!ok && current[deviceId] !== false) {
+              toasts.push({ tone: 'error', title: t('toast.peerUntrusted'), body: t('toast.peerUntrustedBody') });
+            }
+            return { ...current, [deviceId]: ok };
+          });
+        },
+        // Never fall back to the relay's roster here: that key is exactly what an
+        // attacker controls. Only the locally stored pairing record can be a pin.
+        resolveDevicePublicKey: (deviceId) =>
+          devicesRef.current.find((device) => device.id === deviceId)?.publicKey,
+        
         resolveDeviceName: (deviceId) =>
           devicesRef.current.find((device) => device.id === deviceId)?.name ??
           peersRef.current.find((peer) => peer.id === deviceId)?.name ??
@@ -625,15 +661,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refreshTransfers],
   );
 
+  /**
+   * Deleting a record that is still moving would let the engine keep writing into
+   * rows the user just removed. Stop the transfer first, then delete.
+   */
+  const isActiveTransfer = useCallback((id: string) => {
+    const phase = progressRef.current[id]?.phase;
+    return phase === 'sending' || phase === 'receiving' || phase === 'hashing' || phase === 'verifying';
+  }, []);
+
   const removeTransfer = useCallback(
     async (id: string) => {
+      if (isActiveTransfer(id)) {
+        engineRef.current?.cancel(id);
+        // Give the engine one tick to observe the flag before its rows disappear.
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
       await deleteTransfer(id);
       setTransfers((current) => current.filter((entry) => entry.id !== id));
+      setProgress((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
     },
-    [],
+    [isActiveTransfer],
+  );
+
+  const retryTransfer = useCallback(
+    async (id: string) => {
+      const ok = await engineRef.current?.retry(id);
+      await refreshTransfers();
+      if (!ok) toasts.push({ tone: 'warn', title: t('notice.failed'), body: t('xfer.peerOffline') });
+    },
+    [refreshTransfers, toasts],
   );
 
   const clearHistory = useCallback(async () => {
+    for (const [id, update] of Object.entries(progressRef.current)) {
+      if (update.phase === 'sending' || update.phase === 'receiving' || update.phase === 'hashing' || update.phase === 'verifying') {
+        engineRef.current?.cancel(id);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 80));
     await clearTransfers();
     setTransfers([]);
     setTexts([]);
@@ -741,6 +811,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshTransfers,
       toggleFavoriteTransfer,
       removeTransfer,
+      retryTransfer,
       cancelTransfer,
       clearHistory,
       reconnectRelay,
@@ -785,6 +856,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshTransfers,
       toggleFavoriteTransfer,
       removeTransfer,
+      retryTransfer,
       cancelTransfer,
       clearHistory,
       reconnectRelay,
@@ -801,7 +873,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       peers: peersRef.current,
       devices: devicesRef.current.map((device) => ({ id: device.id, name: device.name })),
       links: meshRef.current?.listLinks() ?? [],
-      transfers: transfers.map((record) => ({ id: record.id, name: record.name, status: record.status, direction: record.direction, error: record.error })),
+      verified: verifiedRef.current,
+      transfers: transfers.map((record) => ({
+        id: record.id,
+        name: record.name,
+        status: record.status,
+        direction: record.direction,
+        error: record.error,
+        chunkSize: record.chunkSize,
+        opfsStored: record.opfsStored,
+      })),
     });
     void ice;
     (window as unknown as { __DROPZONE_DEBUG__?: () => unknown }).__DROPZONE_DEBUG__ = debug;

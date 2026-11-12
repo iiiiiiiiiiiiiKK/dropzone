@@ -180,13 +180,45 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 
 | 检查项 | 方式 | 结果 |
 | --- | --- | --- |
-| 单元测试 | `pnpm test`（Vitest） | **19 个全部通过**：分帧编解码、P-256 身份与签名、安全码、配对令牌、格式化函数 |
+| 单元测试 | `pnpm test`（Vitest） | **47 项全部通过**：分帧编解码、分块预算、P-256 身份与签名、安全码、配对令牌、断点续传算术、OPFS 路径、格式化函数 |
 | 信令协议 v1 | `pnpm test:signal` | Node 中继上 **21 项检查通过**（一次性邀请、仅已配对设备可转发、限流、32 KiB 帧上限、TURN HMAC 凭证、来源拒绝）；同一套测试在 `wrangler dev` 的 Worker 变体上同样通过 |
 | 生产构建 | `pnpm build` | `tsc --noEmit` 无错误，`vite build` 产出 `dist/` |
 | 浏览器端到端 | 两个真实 Chromium 上下文 + 真实用户操作 | 通过一次性二维码/链接完成配对，交换 offer/answer/ICE，**32 B** 与 **150 000 B** 文件传输完成后双方 SHA-256 一致，接收端可从 IndexedDB 读出文件 |
 | 线上部署 | 线上 GitHub Pages + 已部署的 Worker 中继 | 同一套端到端流程多次通过，控制台无报错 |
 | 响应式检查 | 393×852、820×1180、1024×800、1440×940 | 无横向溢出、无控件裁切、字体正常加载、触控目标 ≥ 28 px |
 | 剪贴板 | 剪贴板中放图片后按 `Ctrl/Cmd+V` | 原始字节入队，显示缩略图、尺寸与大小，全程不上传 |
+
+### 本轮审计修复（安全与可靠性）
+
+按架构审计报告逐项落地，均为代码级修改并跑过测试：
+
+| 问题 | 处理 |
+| --- | --- |
+| 握手只验证消息自带公钥，未绑定配对记录 | 新增 `src/lib/trust.ts` 身份策略与 `resolveDevicePublicKey()`：握手用**配对时保存的公钥**验签，公钥不一致即判不可信；roster 的 key 不再覆盖本地 pin；设备页与设备栏显示持续的「公钥不一致」徽章 |
+| 刷新恢复把整份文件读进内存 | 新增 `openSourceFile()`，用 OPFS `File` 句柄按需读取；恢复不再复制整份负载，且跳过重复 staging |
+| 并发触发可能启动两个发送者 | `PeerMesh.ensure()` 改为 single-flight；`resumeToPeer()` 在**第一个 await 之前**抢占 transfer id |
+| 分块尺寸只在内存里，刷新后可能错位 | `chunkSize` 写入 transfer 记录，恢复时优先读回，保证序号网格不变 |
+| 接收端不校验序号，重复/跳号会静默写坏 | `CHUNK.seq` 必须等于 `nextSeq`：重复丢弃、跳号立即中断并保留已收字节 |
+| IndexedDB 写失败时整批数据已从内存移除 | 写库失败时把批次放回缓冲并回退计数，再报存储错误 |
+| 失败记录无法手动重试，OPFS 副本滞留 | 新增 `TransferEngine.retry()` 与上下文 `retryTransfer()`，历史/工作区行显示重试按钮；副本在删除记录时才回收 |
+| 删除/清空历史可能和活跃传输打架 | 删除或清空前先 `cancel()` 活跃传输并等待一个节拍，再清数据与进度 |
+| SW 可能用不完整的新缓存替换可用旧缓存 | 安装阶段有任一 shell 资源失败即整体放弃并删除半装缓存；仅在确认 index.html 存在时才清理旧缓存；导航超时会 `abort()` 真实请求 |
+| 新 SW 接管后页面仍跑旧代码 | 增加 `controllerchange` 监听，接管即重载；`visibilitychange` 时主动触发更新检查 |
+| iOS 主屏图标用 SVG | `apple-touch-icon` 改为 180/192 PNG，并把 PNG 纳入 SW shell |
+
+验证结果：
+
+- `tsc --noEmit`：干净。
+- `vitest run`：**54 项通过**（新增 `contiguousInfo`、OPFS 阈值与 `trust.ts` 身份策略用例）。
+- `vite build`：成功，主包 804.29 kB / gzip 264.14 kB。
+- 端到端（iPhone 视口 → 桌面）：8.6 MB `.mov` **completed**，落盘 8600000，记录中 `chunkSize=64512`。
+- 跨刷新续传（12 MB，中途强制刷新发送端）：**completed**，落盘 12582912，`resumeOffset` 从 3096576 继续。
+
+### 已知剩余风险
+
+- 接收完成阶段仍会把整份载荷组装成 Blob 并一次性计算摘要，超大文件在内存受限的移动设备上仍有峰值风险（需要流式落盘才能根治）。
+- 真实 iOS/WebKit、iOS 主屏 PWA 与公网 TURN 连通性需要实机与云安全组配合验证；本轮只覆盖静态代码与本地 Chromium 端到端。
+- 依赖安全审计未能执行：当前 registry 的 audit 端点不可用（`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`）。
 
 ### 双向续传（本轮再完善）
 
@@ -319,7 +351,7 @@ OPFS 写入是尽力而为：不支持 OPFS、配额不足或文件小于 1 MB �
 
 - 剪贴板读取需要页面聚焦与用户手势；iOS Safari 完全不开放脚本读取剪贴板，只能手动粘贴。
 - 标签页或 PWA 未运行时无法后台接收，传输期间请保持双方页面打开。
-- 刷新页面后不支持续传：记录标记为 `interrupted`，只能从头重传；会话内的续传是可用的。
+- 刷新页面后**支持续传**：发送端把源文件副本放入 OPFS（≥256 KiB），接收端保留已收分块，重连后自动续传；小于阈值的文件需要重新选择。
 - 托管演示（GitHub Pages）只有静态 UI，需要自建信令；未配置时显示离线状态。
 - 每台已配对设备同时只维持一条对等连接，没有多播/群发。
 - 浏览器存储可能被清理，IndexedDB 不是备份；需要留存请使用历史导出。
@@ -327,9 +359,9 @@ OPFS 写入是尽力而为：不支持 OPFS、配额不足或文件小于 1 MB �
 ### 路线图
 
 - 通过 File System Access API 流式写盘接收，其余浏览器使用有界内存回退。
-- 基于 OPFS 的跨刷新续传。
+- 一对多群发之外的其余路线（跨刷新续传已实现）。
 - 一对多群发（一次发往多台自己的设备）。
-- 显式的设备撤销界面与可见的信任台账。
+- 显式的设备撤销界面与可见的信任台账（当前握手已校验配对公钥，但没有独立的信任台账页面）。
 - 依据 `getStats()` 往返时延自适应调整分块与速率。
 - 真实浏览器端到端测试（双对等上下文、剪贴板、移动布局）。
 
@@ -617,65 +649,3 @@ The frontend is a static bundle and the relay is a separate service, so a static
 | TURN relay | optional, self-hosted coturn | configured through `TURN_URLS` / `TURN_SECRET` |
 
 The bundle reads its relay from `config.json` at runtime, so pointing a fork at your own relay needs no rebuild.
-
-1. `corepack enable && pnpm install && pnpm build` → publish `dist/`.
-2. Run the relay behind TLS (`wss://`): Node + reverse proxy, Docker Compose, or `pnpm worker:deploy`.
-3. Set `ALLOWED_ORIGINS` to your exact frontend origin, and set `VITE_SIGNAL_URL` (or `window.__DROPZONE_CONFIG__`) to the public `wss://` URL.
-4. For restrictive networks, point `TURN_URLS`/`TURN_SECRET` at a coturn instance; keep the secret server-side.
-
-Full steps (GitHub Pages, Cloudflare Pages, Docker/VPS, coturn): **[docs/deployment.md](docs/deployment.md)**.
-
-## Security and privacy
-
-**What never leaves the browser**
-
-- File bytes, file names, text notes and transfer history. There is no upload route anywhere in the project.
-- Private keys. The P-256 private key is re-imported as **non-extractable**, so it can sign but cannot be exported back out of Web Crypto.
-- TURN credentials are minted server-side per device and expire.
-
-**What the relay sees**
-
-| Sees | Does not see |
-| --- | --- |
-| Device id, display name, device type, public key, presence, pairing invitation hashes, SDP/ICE payloads, message sizes and timings. | File content, file names, file types, sizes of files, text notes, passwords. |
-
-The relay is nonetheless **trusted for peer discovery**: it learns which devices are online and it could hand you a substituted public key during pairing. That is exactly why DROPZONE shows a safety number and verifies the ECDSA handshake signature — compare the number on both screens if you suspect the relay.
-
-**Transport**
-
-- WebRTC DataChannel is encrypted with DTLS-SRTP/SCTP; when a TURN relay is used it forwards ciphertext only.
-- The signaling connection must be `wss://` in production. `ws://` is for local development.
-- Content Security Policy, HSTS and origin isolation are the deployment operator's responsibility (see the deployment guide).
-
-**Reporting**
-
-Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md). Do not open a public issue for an active exploit.
-
-## Browser support
-
-| Browser | Desktop | Mobile | Notes |
-| --- | --- | --- | --- |
-| Chromium 111+ (Chrome, Edge, Brave, Arc) | ✅ | ✅ Android | Full support: DataChannel, clipboard image paste, PWA install, storage persistence. |
-| Firefox 115+ | ✅ | ✅ Android | Clipboard images arrive through `paste` events; PWA install depends on platform. |
-| Safari 16.4+ (macOS) | ✅ | — | PWA install via *Add to Home Screen*; background tabs are suspended aggressively. |
-| Safari on iOS 16.4+ | — | ⚠️ limited | Receiving works while the tab is foregrounded; scripted clipboard reads are unavailable, so paste comes from the system menu. |
-| Other evergreen browsers | best effort | best effort | Web Crypto + `RTCDataChannel` are required; report what breaks. |
-
-## Verification status
-
-Everything below was executed against this repository — not estimated.
-
-| Check | Harness | Result |
-| --- | --- | --- |
-| Unit tests | `pnpm test` (Vitest) | **19 passed**, 4 files: frame encoding/decoding, P-256 identity and signatures, safety numbers, pairing tokens, format helpers |
-| Signaling protocol v1 | `pnpm test:signal` | **21 checks passed** on the Node relay (single-use invites, relay-only signalling between paired peers, rate limiting, 32 KiB frame ceiling, TURN HMAC credentials, origin rejection); the same suite passes against the Worker variant under `wrangler dev` |
-| Production build | `pnpm build` | `tsc --noEmit` clean, `vite build` emits `dist/` |
-| Browser end-to-end | two real Chromium contexts, real user gestures | paired via the one-time QR/link flow, exchanged offer/answer/ICE, completed transfers of **32 B** and **150 000 B** with SHA-256 matching on both sides, files readable from the receiver's IndexedDB |
-| Live deployment | the published Pages site + the deployed Worker relay | the same end-to-end flow passed repeatedly with no console errors |
-| Responsive audit | 393×852, 820×1180, 1024×800, 1440×940 | no horizontal overflow, no clipped controls, fonts loaded, tap targets ≥ 28 px |
-| Clipboard ingest | `Ctrl/Cmd+V` with an image on the clipboard | image staged with original bytes, preview, dimensions and size; no upload involved |
-| Bilingual switch | top-bar language button, both directions, plus reload | every screen, dialog, toast and transfer state switches instantly; the choice survives a reload; no horizontal overflow in 中文 at 393 and 1440 px |
-
-## Known limitations
-
-These are real, current behaviours — not roadmap items:

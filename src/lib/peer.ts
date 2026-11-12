@@ -53,6 +53,8 @@ export class PeerMesh {
 
   /** ICE servers without TURN, used for the direct-first attempt. */
   private directServers: RTCIceServer[] = [];
+  /** In-progress handshakes, so concurrent callers await the same attempt. */
+  private connecting = new Map<string, Promise<RTCDataChannel>>();
 
   getLinkState(deviceId: string): LinkState {
     return this.links.get(deviceId)?.state ?? 'idle';
@@ -67,9 +69,27 @@ export class PeerMesh {
     return Array.from(this.links.entries()).map(([deviceId, link]) => ({ deviceId, state: link.state }));
   }
 
-  /** Returns an open data channel, establishing the connection when needed. */
+  /**
+   * Returns an open data channel, establishing the connection when needed.
+   *
+   * Concurrent callers share one handshake. Without this, two sends to the same peer
+   * both saw a stable link and negotiated, producing competing offers and letting one
+   * caller's timeout close the link the other was still using.
+   */
   async ensure(deviceId: string): Promise<RTCDataChannel> {
     if (!deviceId) throw new Error('A target device is required');
+    if (this.isOpen(deviceId)) return this.links.get(deviceId)!.channel!;
+    const inflight = this.connecting.get(deviceId);
+    if (inflight) return inflight;
+    const attempt = this.connect(deviceId).finally(() => {
+      if (this.connecting.get(deviceId) === attempt) this.connecting.delete(deviceId);
+    });
+    this.connecting.set(deviceId, attempt);
+    return attempt;
+  }
+
+  /** Single-flight body of ensure(); everything below runs at most once per peer. */
+  private async connect(deviceId: string): Promise<RTCDataChannel> {
     if (this.isOpen(deviceId)) return this.links.get(deviceId)!.channel!;
     const stale = this.links.get(deviceId);
     if (stale && (stale.pc.connectionState === 'failed' || stale.pc.connectionState === 'closed')) {
@@ -234,6 +254,7 @@ export class PeerMesh {
   }
 
   close(deviceId: string): void {
+    this.connecting.delete(deviceId);
     const link = this.links.get(deviceId);
     if (!link) return;
     try {

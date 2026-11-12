@@ -183,6 +183,22 @@ const DICT: Record<string, [string, string]> = {
     '传输仍在进行，离开当前页面会中断它。',
   ],
   'xfer.previewHint': ['click anywhere to close', '点击任意位置关闭'],
+  'xfer.sourceGone': [
+    'The source copy is no longer on this device, so it has to be sent again.',
+    '本机已找不到源文件副本，需要重新发送。',
+  ],
+  'xfer.peerOffline': [
+    'That device is not connected right now.',
+    '该设备当前未连接。',
+  ],
+  'xfer.sequenceGap': [
+    'The other device and this one disagree about chunk order. Retrying restarts from the last confirmed block.',
+    '双方对分块顺序不一致。重试会从已确认的最后一个分块继续。',
+  ],
+  'xfer.storageWrite': [
+    'Writing to local storage failed — the browser may be out of space.',
+    '写入本地存储失败，可能是浏览器空间不足。',
+  ],
   'xfer.stalled': [
     'The other device stopped responding mid-transfer. Keep both tabs in the foreground, then retry.',
     '对方设备在传输中断开响应。请让两个页面都保持在前台再重试。',
@@ -313,6 +329,7 @@ const DICT: Record<string, [string, string]> = {
   'dev.sendFiles': ['Send files', '发送文件'],
   'dev.unpair': ['Unpair', '解除配对'],
   'dev.verified': ['verified', '已验证'],
+  'dev.untrusted': ['key mismatch', '公钥不一致'],
   'dev.trustTitle': ['How trust works here', '这里的信任机制'],
   'dev.trust1': [
     'Each device generates an ECDSA P-256 key pair; the private key never leaves this browser and cannot be exported.',
@@ -406,6 +423,11 @@ const DICT: Record<string, [string, string]> = {
   'toast.noDeviceBody': ['Pair a device first — scan its QR code from Devices.', '请先配对设备：在「我的设备」里扫描二维码。'],
   'toast.relayOfflineTitle': ['Relay offline', '中继离线'],
   'toast.relayOfflineBody': ['Reconnect the signaling relay before sending.', '发送前请先重连信令中继。'],
+  'toast.peerUntrusted': ['Device identity changed', '设备身份不一致'],
+  'toast.peerUntrustedBody': [
+    'The key this device presented does not match the one you paired. Unpair and pair again.',
+    '该设备出示的公钥与配对时保存的不一致，请解除配对后重新配对。',
+  ],
   'toast.resumed': ['Transfer resumed', '已续传'],
   'toast.resumedBody': ['Continuing from where the previous attempt stopped.', '从上次中断的位置继续。'],
   'toast.textSent': ['Text sent', '文字已发送'],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contiguousOffset, isRetryable, retryDelayMs } from '../src/lib/resume';
+import { contiguousInfo, contiguousOffset, isRetryable, retryDelayMs } from '../src/lib/resume';
 
 const CHUNK = 1024;
 
@@ -23,6 +23,17 @@ describe('contiguousOffset', () => {
   it('refuses to resume without a sane chunk size', () => {
     expect(contiguousOffset([{ seq: 0, byteLength: 10 }], 0)).toBe(0);
     expect(contiguousOffset([{ seq: 0, byteLength: 10 }], Number.NaN)).toBe(0);
+  });
+});
+
+describe('contiguousInfo', () => {
+  it('reports offset and chunk count together', () => {
+    const chunks = [{ seq: 0, byteLength: 1024 }, { seq: 1, byteLength: 1024 }, { seq: 2, byteLength: 512 }];
+    expect(contiguousInfo(chunks, CHUNK)).toEqual({ offset: 2560, count: 3 });
+  });
+
+  it('counts only the gapless prefix', () => {
+    expect(contiguousInfo([{ seq: 0, byteLength: 1024 }, { seq: 2, byteLength: 1024 }], CHUNK)).toEqual({ offset: 1024, count: 1 });
   });
 });
 

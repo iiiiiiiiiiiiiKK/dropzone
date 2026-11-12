@@ -8,9 +8,10 @@
  */
 export type StoredChunk = { seq: number; byteLength: number };
 
-export function contiguousOffset(chunks: StoredChunk[], chunkSize: number): number {
-  if (chunks.length === 0) return 0;
-  if (!Number.isFinite(chunkSize) || chunkSize <= 0) return 0;
+/** Offset plus the number of contiguous chunks it covers. */
+export function contiguousInfo(chunks: StoredChunk[], chunkSize: number): { offset: number; count: number } {
+  if (chunks.length === 0) return { offset: 0, count: 0 };
+  if (!Number.isFinite(chunkSize) || chunkSize <= 0) return { offset: 0, count: 0 };
   const sorted = [...chunks].sort((a, b) => a.seq - b.seq);
   let expected = 0;
   let offset = 0;
@@ -19,7 +20,11 @@ export function contiguousOffset(chunks: StoredChunk[], chunkSize: number): numb
     offset += chunk.byteLength;
     expected += 1;
   }
-  return offset;
+  return { offset, count: expected };
+}
+
+export function contiguousOffset(chunks: StoredChunk[], chunkSize: number): number {
+  return contiguousInfo(chunks, chunkSize).offset;
 }
 
 /** Backoff between automatic retries: fast first, patient later. */

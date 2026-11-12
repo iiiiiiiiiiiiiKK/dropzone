@@ -16,7 +16,7 @@ import { Badge, Button, Card, EmptyState } from '../components/ui';
 import type { ViewKey } from '../components/Sidebar';
 
 export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) => void; onPair: () => void }) {
-  const { transfers, progress, devices, toggleFavoriteTransfer, removeTransfer, cancelTransfer, addFiles, queue } = useApp();
+  const { transfers, progress, devices, toggleFavoriteTransfer, removeTransfer, cancelTransfer, retryTransfer, addFiles, queue } = useApp();
   const toasts = useToasts();
   const reportMissing = () => toasts.push({ tone: 'warn', title: t('xfer.missing'), body: t('xfer.missingBody') });
   const recent = transfers.slice(0, 6);
@@ -117,6 +117,7 @@ export function Workspace({ onNavigate, onPair }: { onNavigate: (view: ViewKey) 
                     onFavorite={() => void toggleFavoriteTransfer(record.id)}
                     onDelete={() => void removeTransfer(record.id)}
                     onCancel={() => cancelTransfer(record.id)}
+                    onRetry={() => void retryTransfer(record.id)}
                     onMissingFile={reportMissing}
                   />
                 ))}

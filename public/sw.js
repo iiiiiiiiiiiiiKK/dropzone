@@ -10,25 +10,42 @@
  *   - answers a failed hashed-asset request with a real 504 instead of an empty
  *     response, so the app can show an error instead of a blank page.
  */
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = 'dropzone-shell-' + VERSION;
-const SHELL = ['./', './index.html', './favicon.svg', './manifest.webmanifest', './icon-maskable.svg'];
+const SHELL = [
+  './',
+  './index.html',
+  './favicon.svg',
+  './manifest.webmanifest',
+  './icon-maskable.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './config.json',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
       // Fetch fresh copies: cache.addAll would happily store an error page.
+      let failed = 0;
       await Promise.all(
         SHELL.map(async (path) => {
           try {
             const response = await fetch(path, { cache: 'reload' });
             if (response.ok) await cache.put(path, response);
+            else failed += 1;
           } catch {
-            /* offline install: the runtime cache will fill in later */
+            failed += 1;
           }
         }),
       );
+      // Refuse to take over with an incomplete shell. The previous worker keeps
+      // serving its complete cache, and the browser retries on the next visit.
+      if (failed > 0) {
+        await caches.delete(CACHE);
+        throw new Error('shell install incomplete: ' + failed + ' resource(s) failed');
+      }
       await self.skipWaiting();
     })(),
   );
@@ -37,8 +54,14 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
+      // Only drop older shells once this one is known to be complete; otherwise a
+      // half-installed worker would leave the app with no usable offline shell.
+      const cache = await caches.open(CACHE);
       const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)));
+      const index = await cache.match('./index.html');
+      if (index) {
+        await Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)));
+      }
       await self.clients.claim();
     })(),
   );
@@ -64,20 +87,22 @@ self.addEventListener('fetch', (event) => {
     // fetch would otherwise leave the PWA on a white screen forever.
     event.respondWith(
       (async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const cache = await caches.open(CACHE);
         try {
-          const fresh = await Promise.race([
-            fetch(request, { cache: 'no-store' }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
-          ]);
+          const fresh = await fetch(request, { cache: 'no-store', signal: controller.signal });
           if (fresh && fresh.ok) {
-            const cache = await caches.open(CACHE);
             await cache.put('./index.html', fresh.clone());
             return fresh;
           }
           throw new Error('bad response');
         } catch {
-          const cached = await caches.match('./index.html');
-          return cached || Response.error();
+          const cached = await cache.match('./index.html');
+          if (cached) return cached;
+          return new Response('Offline', { status: 503, statusText: 'Offline' });
+        } finally {
+          clearTimeout(timer);
         }
       })(),
     );

@@ -13,7 +13,10 @@ describe('sourceFileName', () => {
 });
 
 describe('OPFS_MIN_SIZE', () => {
-  it('only copies files where a local copy pays off', () => {
-    expect(OPFS_MIN_SIZE).toBeGreaterThanOrEqual(512 * 1024);
+  it('stays small enough that typical screenshots keep a resumable source', () => {
+    // Screenshots and short clips are the common retry case, so the copy threshold
+    // must sit below them rather than at a megabyte.
+    expect(OPFS_MIN_SIZE).toBeLessThanOrEqual(512 * 1024);
+    expect(OPFS_MIN_SIZE).toBeGreaterThan(0);
   });
 });

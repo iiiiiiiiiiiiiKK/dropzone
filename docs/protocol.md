@@ -93,13 +93,24 @@ Control payloads are UTF-8 JSON; data payloads are raw bytes.
 | 0x08 | `CANCEL` | both | `{ transferId, reason }` |
 | 0x09 | `TEXT` | both | `{ textId, body, createdAt }` |
 | 0x0a | `PING` / `PONG` | both | `{ ts }` |
+| 0x0c | `RESUME` | receiver → sender | `{ transferId }` — "I still hold partial bytes, continue this transfer" |
 
 Rules:
 
-* Chunk size 64 KiB, adapted down to 16 KiB if `bufferedAmount` stays above the 8 MiB high-water mark.
-* Sender waits for `bufferedamountlow` (threshold 1 MiB) before pushing more chunks.
+* Chunk size is derived from the peer's SCTP `maxMessageSize` minus frame overhead, rounded down
+  to 1 KiB, clamped to 16 KiB … 64 KiB. The chosen value is sent in `META.chunkSize`, stored on the
+  transfer record, and reused for every retry and every resume so the sequence grid never shifts.
+* Sender waits for `bufferedamountlow` (threshold 1 MiB) before pushing more chunks, with a 250 ms
+  poll and an 8 s hard deadline so a lost event cannot park a transfer forever.
 * `sha256` is an incremental SHA-256 over the whole payload, computed while streaming.
-* The receiver writes chunks into IndexedDB as they arrive and verifies the digest on `DONE`;
-  a mismatch triggers `VERIFY{ok:false}` and the sender may retry once automatically.
-* Resume (`ACCEPT.offset > 0`) is supported **within a live session**; across a page reload the
-  transfer is marked `interrupted` in history and can be restarted, never silently resumed.
+* The receiver writes chunks into IndexedDB in batches and verifies the digest on `DONE`;
+  a mismatch triggers `VERIFY{ok:false}` and the sender escalates.
+* The receiver rejects a `CHUNK` whose `seq` is not exactly `nextSeq`: a duplicate is ignored and a
+  gap fails the transfer, because writing either would corrupt offsets silently.
+* Resume (`ACCEPT.offset > 0`) works **within a session and across a page reload**. Senders keep a
+  copy of the payload in OPFS (files ≥ 256 KiB) so the bytes survive a reload; receivers keep their
+  persisted chunks. After reconnecting, either side re-drives the transfer:
+  the sender calls `resumeOutgoing()`, the receiver sends `RESUME`, and both end up on the same
+  `transferId` and the same chunk grid.
+* `RESUME` is rate-shaped: a stalled receiver asks at most 3 times, 25 s apart, then parks the
+  transfer as `interrupted` with its bytes retained for the next reconnect.

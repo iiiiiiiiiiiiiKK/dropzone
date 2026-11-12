@@ -1,4 +1,4 @@
-import { Check, Edit3, KeyRound, Monitor, QrCode, Send, Shield, Smartphone, Tablet, Unplug, Wifi, WifiOff } from 'lucide-react';
+import { Check, Edit3, KeyRound, Monitor, QrCode, Send, Shield, ShieldAlert, Smartphone, Tablet, Unplug, Wifi, WifiOff } from 'lucide-react';
 import { useState } from 'react';
 import { pickFiles } from '../lib/clipboard';
 import { t } from '../lib/i18n';
@@ -98,9 +98,13 @@ export function Devices({ onPair }: { onPair: () => void }) {
                         {onlineNow ? t('rail.online') : t('rail.lastSeen', { time: timeAgo(device.lastSeen) })}
                       </p>
                     </div>
-                    {verified[device.id] ? (
+                    {verified[device.id] === true ? (
                       <Badge tone="ok">
                         <Shield className="size-3" /> {t('dev.verified')}
+                      </Badge>
+                    ) : verified[device.id] === false ? (
+                      <Badge tone="err">
+                        <ShieldAlert className="size-3" /> {t('dev.untrusted')}
                       </Badge>
                     ) : null}
                   </div>

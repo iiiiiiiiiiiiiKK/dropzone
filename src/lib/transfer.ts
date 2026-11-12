@@ -6,8 +6,9 @@ import { t } from './i18n';
 import { FRAME, computeChunkSize, decodeChunkFrame, decodeFrame, decodeJsonFrame, encodeChunkFrame, encodeJsonFrame } from './frame';
 import type { PeerMesh } from './peer';
 import { trace } from './log';
-import { dropSource, OPFS_MIN_SIZE, putSource, readSourceSlice, sourceSize } from './opfs';
-import { contiguousOffset, isRetryable, retryDelayMs } from './resume';
+import { dropSource, openSourceFile, OPFS_MIN_SIZE, putSource, readSourceSlice, sourceSize } from './opfs';
+import { contiguousInfo, isRetryable, retryDelayMs } from './resume';
+import { decidePeerTrust, keyToVerify } from './trust';
 import { randomId, safeFileName } from './utils';
 
 const ACCEPT_TIMEOUT_MS = 20_000;
@@ -50,6 +51,8 @@ export type TransferEvents = {
   onIncomingReady?: (transferId: string, name: string, mime: string) => void;
   onPeerVerified: (deviceId: string, verified: boolean, publicKey?: string) => void;
   resolveDeviceName: (deviceId: string) => string;
+  /** Public key recorded when the device was paired, if any. */
+  resolveDevicePublicKey?: (deviceId: string) => string | undefined;
   autoAccept: () => boolean;
   /** Called when auto-receive is off; resolve true to accept the transfer. */
   requestAccept?: (deviceId: string, name: string, size: number) => Promise<boolean>;
@@ -77,6 +80,8 @@ type IncomingState = {
   lastEmit: number;
   startedAt: number;
   lastChunkAt: number;
+  /** Grid the sender used; a chunk arriving off this grid would corrupt the file. */
+  chunkSize?: number;
   watchdog?: ReturnType<typeof setTimeout>;
   /** How many times this receiver asked the peer to resume; capped to avoid a loop. */
   resumeAsked?: number;
@@ -110,6 +115,8 @@ export class TransferEngine {
   private opfsIds = new Set<string>();
   /** Transfers currently being pushed, to keep a RESUME from starting a second sender. */
   private activeSends = new Set<string>();
+  /** Transfer ids with a resume in progress, claimed synchronously at entry. */
+  private resuming = new Set<string>();
 
   constructor(
     private readonly options: {
@@ -119,8 +126,16 @@ export class TransferEngine {
     },
   ) {}
 
-  greet(deviceId: string): void {
-    if (this.helloSent.has(deviceId) && this.options.mesh.isOpen(deviceId)) return;
+  /** Forgets that this peer was greeted, so the next open sends a fresh HELLO. */
+  resetHello(deviceId: string): void {
+    this.helloSent.delete(deviceId);
+  }
+
+  greet(deviceId: string, force = false): void {
+    // An identity proof belongs to one channel, not to the page session: a
+    // renegotiated channel must re-prove the key, otherwise a swapped key would
+    // never be re-checked after the first greeting.
+    if (!force && this.helloSent.has(deviceId) && this.options.mesh.isOpen(deviceId)) return;
     const nonce = newNonce();
     void sign(this.options.identity, `${this.options.identity.deviceId}|${nonce}`).then((signature) => {
       const sent = this.options.mesh.send(
@@ -308,13 +323,24 @@ export class TransferEngine {
 
   private async handleHello(deviceId: string, payload: Uint8Array): Promise<void> {
     const control = decodeJsonFrame<{ deviceId: string; publicKey: string; nonce: string; sig: string }>(payload);
-    if (!control?.deviceId || !control.publicKey || !control.nonce || !control.sig) return;
+    if (!control?.deviceId || !control.nonce || !control.sig) return;
+    const pinned = this.options.events.resolveDevicePublicKey?.(deviceId);
+    const presented = control.publicKey;
     if (control.deviceId !== deviceId) {
       this.options.events.onPeerVerified(deviceId, false);
       return;
     }
-    const ok = await verify(control.publicKey, `${control.deviceId}|${control.nonce}`, control.sig);
-    this.options.events.onPeerVerified(deviceId, ok, control.publicKey);
+    // Always verify the signature with the key we trust (or the claim, for a legacy
+    // record with no pin) and then judge the identity separately, so a substituted
+    // key cannot pass merely because its own signature is self-consistent.
+    const signatureValid = presented
+      ? await verify(keyToVerify(pinned, presented), `${control.deviceId}|${control.nonce}`, control.sig)
+      : false;
+    const decision = decidePeerTrust({ pinned, presented, signatureValid });
+    if (decision !== 'verified') {
+      trace('transfer', 'peer trust rejected', { deviceId: deviceId.slice(0, 8), decision });
+    }
+    this.options.events.onPeerVerified(deviceId, decision === 'verified', presented);
   }
 
   private async handleMeta(deviceId: string, payload: Uint8Array): Promise<void> {
@@ -331,10 +357,11 @@ export class TransferEngine {
     // A retry re-sends META with the same transfer id. Anything already stored from
     // the previous attempt is contiguous (the channel is ordered), so reporting its
     // byte count lets the sender resume instead of starting over.
+    const chunkSize = Number((meta as { chunkSize?: number }).chunkSize) || 0;
     const stored = await db.chunks.where('transferId').equals(meta.transferId).toArray();
-    const resumeOffset = contiguousOffset(
+    const { offset: resumeOffset, count: resumeCount } = contiguousInfo(
       stored.map((chunk) => ({ seq: chunk.seq, byteLength: chunk.data.byteLength })),
-      Number((meta as { chunkSize?: number }).chunkSize) || 0,
+      chunkSize,
     );
     const state: IncomingState = {
       id: meta.transferId,
@@ -344,7 +371,8 @@ export class TransferEngine {
       size: meta.size,
       expectedSha: meta.sha256 ?? '',
       received: resumeOffset,
-      nextSeq: stored.length,
+      nextSeq: resumeCount,
+      chunkSize,
       hasher: sha256.create(),
       buffer: [],
       lastEmit: 0,
@@ -365,6 +393,7 @@ export class TransferEngine {
       createdAt: Date.now(),
       status: 'transferring',
       favorite: 0,
+      ...(chunkSize > 0 ? { chunkSize } : {}),
     };
     await db.transfers.put(record);
     this.options.events.onRecord(record);
@@ -421,7 +450,19 @@ export class TransferEngine {
     const state = this.incoming.get(chunk.id);
     if (!state) return;
     state.lastChunkAt = Date.now();
-    state.hasher.update(chunk.data);
+    // The channel is ordered and reliable, so a gap or a replay means the two sides
+    // disagree about the sequence grid. Accepting it would silently write bytes at
+    // the wrong offset and only surface as a checksum mismatch at the very end.
+    if (chunk.seq !== state.nextSeq) {
+      if (chunk.seq < state.nextSeq) {
+        trace('transfer', 'duplicate chunk ignored', { id: chunk.id, seq: chunk.seq, next: state.nextSeq });
+        return;
+      }
+      trace('transfer', 'sequence gap', { id: chunk.id, seq: chunk.seq, next: state.nextSeq });
+      void this.failTransfer(chunk.id, t('xfer.sequenceGap'), true);
+      this.incoming.delete(chunk.id);
+      return;
+    }
     state.received += chunk.data.byteLength;
     state.nextSeq = chunk.seq + 1;
     state.buffer.push({ transferId: chunk.id, seq: chunk.seq, data: chunk.data.slice().buffer });
@@ -483,7 +524,18 @@ export class TransferEngine {
   private async flushChunks(state: IncomingState): Promise<void> {
     if (state.buffer.length === 0) return;
     const batch = state.buffer.splice(0, state.buffer.length);
-    await db.chunks.bulkPut(batch);
+    try {
+      await db.chunks.bulkPut(batch);
+      for (const entry of batch) state.hasher.update(new Uint8Array(entry.data));
+    } catch (error) {
+      // A quota or transaction failure must not cost us the bytes: put them back so
+      // DONE still has a complete payload, and report the storage problem once.
+      state.buffer.unshift(...batch);
+      state.nextSeq -= batch.length;
+      state.received -= batch.reduce((total, entry) => total + entry.data.byteLength, 0);
+      trace('transfer', 'chunk write failed', { id: state.id, batch: batch.length, reason: (error as Error).message });
+      throw new Error(t('xfer.storageWrite'));
+    }
   }
 
   private async cleanupIncoming(transferId: string): Promise<void> {
@@ -520,6 +572,18 @@ export class TransferEngine {
    * was suspended, backgrounded or killed before its own retry loop finished.
    */
   async resumeToPeer(deviceId: string, transferId: string): Promise<boolean> {
+    // Claimed before the first await: two RESUME frames (or a RESUME plus a reconnect
+    // pass) must not start two senders for the same transfer.
+    if (this.activeSends.has(transferId) || this.resuming.has(transferId)) return false;
+    this.resuming.add(transferId);
+    try {
+      return await this.startResume(deviceId, transferId);
+    } finally {
+      this.resuming.delete(transferId);
+    }
+  }
+
+  private async startResume(deviceId: string, transferId: string): Promise<boolean> {
     const record = await db.transfers.get(transferId);
     if (!record || record.direction !== 'out') return false;
     const size = await sourceSize(transferId);
@@ -527,9 +591,10 @@ export class TransferEngine {
       trace('transfer', 'resume requested but source is gone', { transferId });
       return false;
     }
-    if (this.activeSends.has(transferId)) return false;
-    const bytes = await readSourceSlice(transferId, 0, size);
-    const file = new File([bytes], record.name, { type: record.mime });
+    const stored = await openSourceFile(transferId);
+    if (!stored) return false;
+    // A File over the OPFS handle streams from disk; no full-payload allocation.
+    const file = new File([stored], record.name, { type: record.mime });
     this.opfsIds.add(transferId);
     trace('transfer', 'peer asked to resume', { transferId, size });
     await this.sendOne(deviceId, file, transferId);
@@ -548,6 +613,15 @@ export class TransferEngine {
   }
 
   /** Interrupted inbound transfers, per peer, so a reconnecting link can ask for them. */
+  /** True when a failed/interrupted record still has bytes to resume from. */
+  async isResumable(transferId: string): Promise<boolean> {
+    const record = await db.transfers.get(transferId);
+    if (!record) return false;
+    if (record.direction === 'out') return Boolean(record.opfsStored);
+    const stored = await db.chunks.where('transferId').equals(transferId).count();
+    return stored > 0;
+  }
+
   async interruptedInbound(deviceId: string): Promise<string[]> {
     const records = await db.transfers.where('status').equals('interrupted').toArray();
     return records
@@ -570,6 +644,8 @@ export class TransferEngine {
   /** Persists the outgoing bytes so a page reload can still resume. Best effort. */
   private async stageSource(id: string, file: File): Promise<void> {
     if (file.size < OPFS_MIN_SIZE) return;
+    // A resumed transfer already owns an OPFS copy; copying again doubles the write.
+    if (this.opfsIds.has(id)) return;
     if (!(await putSource(id, file))) return;
     this.opfsIds.add(id);
     await db.transfers.update(id, { opfsStored: true });
@@ -589,12 +665,45 @@ export class TransferEngine {
       await dropSource(candidate.id);
       return null;
     }
-    const bytes = await readSourceSlice(candidate.id, 0, size);
-    const file = new File([bytes], candidate.name, { type: candidate.mime });
+    const stored = await openSourceFile(candidate.id);
+    if (!stored) {
+      await db.transfers.update(candidate.id, { status: 'failed', error: 'Stored source is unreadable' });
+      await dropSource(candidate.id);
+      return null;
+    }
+    const file = new File([stored], candidate.name, { type: candidate.mime });
     this.opfsIds.add(candidate.id);
     trace('transfer', 'resuming after reload', { id: candidate.id, size });
     await this.sendOne(deviceId, file, candidate.id);
     return candidate.id;
+  }
+
+  /**
+   * Manual retry from the history row. Outbound transfers stream their OPFS copy
+   * again; inbound ones ask the peer to continue from the bytes already stored.
+   */
+  async retry(transferId: string): Promise<boolean> {
+    const record = await db.transfers.get(transferId);
+    if (!record || record.kind !== 'file') return false;
+    if (this.activeSends.has(transferId) || this.resuming.has(transferId)) return true;
+    if (record.direction === 'out') {
+      if (!record.opfsStored) {
+        this.options.events.onNotice({ level: 'warn', title: t('notice.failed'), body: t('xfer.sourceGone') });
+        return false;
+      }
+      await db.transfers.update(transferId, { status: 'queued', error: undefined });
+      const updated = await db.transfers.get(transferId);
+      if (updated) this.options.events.onRecord(updated);
+      return this.resumeToPeer(record.deviceId, transferId);
+    }
+    if (!this.options.mesh.isOpen(record.deviceId)) {
+      this.options.events.onNotice({ level: 'warn', title: t('notice.failed'), body: t('xfer.peerOffline') });
+      return false;
+    }
+    await db.transfers.update(transferId, { status: 'transferring', error: undefined });
+    const updated = await db.transfers.get(transferId);
+    if (updated) this.options.events.onRecord(updated);
+    return this.options.mesh.send(record.deviceId, encodeJsonFrame(FRAME.RESUME, { transferId }));
   }
 
   private async openChannel(deviceId: string): Promise<void> {
@@ -605,7 +714,8 @@ export class TransferEngine {
       const hint = /timed out|Connection failed|not ready/i.test(message) ? t('notice.iceHint') : '';
       throw new Error(hint ? `${message}. ${hint}` : message);
     }
-    this.greet(deviceId);
+    // openChannel() runs only for a freshly established channel, so force the proof.
+    this.greet(deviceId, true);
   }
 
   private waitFor(transferId: string, kind: 'accept' | 'verify', timeoutMs: number): Promise<IncomingControl> {
@@ -666,13 +776,16 @@ export class TransferEngine {
       try {
         await this.openChannel(deviceId);
 
-        // The chunk size is pinned per transfer so a resumed attempt lines up with
-        // the sequence numbers the receiver already stored.
+        // The chunk size must survive a reload: the receiver's stored sequence numbers
+        // were laid out on this grid, so it is read back from the record before any
+        // fresh calculation is considered.
         const pinned = this.chunkSizes.get(id);
+        const stored = pinned ?? (await db.transfers.get(id))?.chunkSize;
         const frameOverhead = 5 + 1 + encoder.encode(id).byteLength + 4;
-        const chunkSize = pinned ?? computeChunkSize(this.options.mesh.maxMessageSize(deviceId), frameOverhead, CHUNK_SIZE, MIN_CHUNK_SIZE);
+        const chunkSize = stored ?? computeChunkSize(this.options.mesh.maxMessageSize(deviceId), frameOverhead, CHUNK_SIZE, MIN_CHUNK_SIZE);
         this.chunkSizes.set(id, chunkSize);
-        trace('transfer', 'chunk budget', { attempt, pinned: Boolean(pinned), chunkSize, fileSize: file.size });
+        if (stored !== chunkSize) await db.transfers.update(id, { chunkSize });
+        trace('transfer', 'chunk budget', { attempt, pinned: Boolean(stored), chunkSize, fileSize: file.size });
 
         const acceptPromise = this.waitFor(id, 'accept', ACCEPT_TIMEOUT_MS);
         const sentMeta = this.options.mesh.send(deviceId, encodeJsonFrame(FRAME.META, { transferId: id, name, mime, size: file.size, sha256: digest, chunkSize }));
@@ -759,6 +872,8 @@ export class TransferEngine {
               body: channelProblem ? t('xfer.channelClosed') : iceProblem ? `${lastError} — ${t('notice.iceHint')}` : lastError,
             });
           }
+          // The OPFS copy stays: the history row offers a manual retry, and the
+          // bytes are only reclaimed when the user deletes the record.
           break;
         }
         // Retry: drop the stale channel so the next attempt negotiates a fresh path.

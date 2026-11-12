@@ -12,8 +12,11 @@
 
 const DIR_NAME = 'dropzone-transfers';
 
-/** Below this size an OPFS copy costs more than it saves; just resend. */
-export const OPFS_MIN_SIZE = 1 * 1024 * 1024;
+/**
+ * Below this size an OPFS copy costs more than it saves; the file can simply be
+ * picked again. Above it, keeping a copy is what makes reload-resume possible.
+ */
+export const OPFS_MIN_SIZE = 256 * 1024;
 
 const COPY_PIECE = 4 * 1024 * 1024;
 
@@ -82,6 +85,21 @@ export async function sourceSize(transferId: string): Promise<number> {
     return (await handle.getFile()).size;
   } catch {
     return 0;
+  }
+}
+
+/**
+ * Returns the OPFS copy as a `File`, which browsers back by disk rather than memory.
+ * Resuming a multi-gigabyte transfer must never materialise the whole payload in RAM.
+ */
+export async function openSourceFile(transferId: string): Promise<File | null> {
+  const dir = await transfersDir(false);
+  if (!dir) return null;
+  try {
+    const handle = await dir.getFileHandle(sourceFileName(transferId));
+    return await handle.getFile();
+  } catch {
+    return null;
   }
 }
 

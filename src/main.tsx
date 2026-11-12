@@ -85,18 +85,23 @@ void bootstrap().catch((error: unknown) => {
 });
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  // A new worker taking over means the running page is now served by different code.
+  // Without this the tab keeps executing the old bundle while the new worker controls
+  // its requests, which is exactly the stale-mismatch class of bug.
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
+
   const registerShell = () => {
     void navigator.serviceWorker
       .register('./sw.js', { updateViaCache: 'none' })
       .then((registration) => {
-        // A new worker taking over means stale shell code; reload once, quietly.
-        registration.addEventListener('updatefound', () => {
-          const worker = registration.installing;
-          worker?.addEventListener('statechange', () => {
-            if (worker.state === 'activated' && navigator.serviceWorker.controller) {
-              registration.waiting?.postMessage('skip-waiting');
-            }
-          });
+        // Ask for an update check whenever the app becomes visible again.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') void registration.update().catch(() => undefined);
         });
       })
       .catch(() => undefined);

@@ -45,6 +45,8 @@ export type TransferRecord = {
   opfsStored?: boolean;
   /** Bytes the peer confirmed before an interruption. */
   resumeOffset?: number;
+  /** Payload grid used for CHUNK sequence numbers; persisted so a reload keeps it. */
+  chunkSize?: number;
 };
 
 export type FileRecord = {

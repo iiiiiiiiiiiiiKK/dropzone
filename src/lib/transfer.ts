@@ -481,13 +481,16 @@ export class TransferEngine {
     if (!state) return;
     await this.flushChunks(state);
     const chunks = await db.chunks.where('transferId').equals(control.transferId).sortBy('seq');
-    const parts = chunks.map((chunk) => new Uint8Array(chunk.data));
-    const blob = new Blob(parts as BlobPart[], { type: state.mime });
-    // Hash the stored parts, not the streaming hasher: the digest must describe exactly
-    // what a download would contain, independent of frame arrival timing.
+    // The digest must describe exactly what a download would contain, so it is computed
+    // from the stored records rather than the streaming hasher. Hashing walks the chunks
+    // one at a time: building a parallel array of views first would double the peak RSS
+    // for no benefit, and large files are the case that hurts.
     const verifier = sha256.create();
-    for (const part of parts) verifier.update(part);
+    for (const chunk of chunks) verifier.update(new Uint8Array(chunk.data));
     const digest = Array.from(verifier.digest(), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    // Blob construction accepts the stored ArrayBuffers directly, so the payload is
+    // materialised once (the Blob) instead of once per representation.
+    const blob = new Blob(chunks.map((chunk) => chunk.data) as BlobPart[], { type: state.mime });
     const expected = control.sha256 || state.expectedSha;
     const ok = blob.size === state.size && (!expected || digest === expected);
     if (!ok) {
@@ -613,15 +616,6 @@ export class TransferEngine {
   }
 
   /** Interrupted inbound transfers, per peer, so a reconnecting link can ask for them. */
-  /** True when a failed/interrupted record still has bytes to resume from. */
-  async isResumable(transferId: string): Promise<boolean> {
-    const record = await db.transfers.get(transferId);
-    if (!record) return false;
-    if (record.direction === 'out') return Boolean(record.opfsStored);
-    const stored = await db.chunks.where('transferId').equals(transferId).count();
-    return stored > 0;
-  }
-
   async interruptedInbound(deviceId: string): Promise<string[]> {
     const records = await db.transfers.where('status').equals('interrupted').toArray();
     return records
@@ -900,9 +894,4 @@ export class TransferEngine {
     if (!keepPartial) await this.cleanupIncoming(transferId);
     else this.incoming.delete(transferId);
   }
-}
-
-export function progressRatio(transferred: number, size: number): number {
-  if (!size) return 0;
-  return Math.max(0, Math.min(1, transferred / size));
 }

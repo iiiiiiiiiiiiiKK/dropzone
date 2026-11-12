@@ -68,9 +68,12 @@ Three processes, one of which is optional:
 | `db.ts` | Dexie schema and every query/mutation over `devices`, `transfers`, `files`, `chunks`, `texts`, `settings`; storage estimate, export, pruning. |
 | `signaling.ts` | WebSocket relay client: `hello`/`presence`/`invite`/`signal`, heartbeat, backoff reconnect, roster updates. |
 | `peer.ts` | One `RTCPeerConnection` per paired device: ICE configuration (STUN + short-lived TURN), DataChannel lifecycle, connection-type reporting via `getStats()`. |
-| `transfer.ts` | Framing, 64 KiB chunking, `bufferedAmount` backpressure, incremental SHA-256, resume within a session, cancel and retry. |
+| `transfer.ts` | Framing, SCTP-safe chunking, `bufferedAmount` backpressure, incremental SHA-256, resume across sessions and reloads, cancel and retry. |
 | `clipboard.ts` | Paste, drag-and-drop and file-picker ingestion; object-URL previews and revocation. |
 | `pairing.ts` | Invitation token creation, QR payload encode/decode, expiry checks. |
+| `trust.ts` | Peer identity policy: pin the paired public key, judge a HELLO against it. |
+| `opfs.ts` | Durable source copies so an interrupted outgoing transfer can resume after a reload. |
+| `resume.ts` | Contiguous-chunk arithmetic, retry backoff, retryable-error classification, boot reconciliation. |
 | `theme.ts` | Theme persistence with system fallback, applied as a class on the document element. |
 
 ### UI (`src/components/`, `src/views/`)
@@ -288,8 +291,8 @@ claims its transfer id before the first `await`, so overlapping triggers cannot 
 | --- | --- | --- |
 | `CHUNK_SIZE` | 64 KiB | `transfer.ts` upper bound |
 | `MIN_CHUNK_SIZE` | 16 KiB | `transfer.ts` lower bound |
-| `MAX_BUFFERED_AMOUNT` | 8 MiB | Sender high-water mark |
-| `BUFFERED_LOW_THRESHOLD` | 1 MiB | `bufferedamountlow` resume point |
+| `BUFFERED_LOW_THRESHOLD` | 1 MiB | `bufferedamountlow` resume point (also the poll target) |
+| `DRAIN_TIMEOUT_MS` | 8 s | Hard cap on one backpressure wait |
 | `MAX_SIGNAL_FRAME` | 32 KiB | Client frame guard; relay enforces the same ceiling |
 | `PAIRING_TTL_MS` | 5 minutes | Invitation lifetime (relay default `PAIRING_TTL_SECONDS=300`) |
 | `DEFAULT_HISTORY_LIMIT` | 100 | History pruning when the user has not chosen a limit |

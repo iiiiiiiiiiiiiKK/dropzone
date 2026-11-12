@@ -56,7 +56,6 @@ export const DEFAULT_HISTORY_LIMIT = 100;
 export const MAX_SIGNAL_FRAME = 32 * 1024;
 export const CHUNK_SIZE = 64 * 1024;
 export const MIN_CHUNK_SIZE = 16 * 1024;
-export const MAX_BUFFERED_AMOUNT = 8 * 1024 * 1024;
 export const BUFFERED_LOW_THRESHOLD = 1024 * 1024;
 export const PAIRING_TTL_MS = 5 * 60 * 1000;
 export const APP_VERSION = '1.0.0';

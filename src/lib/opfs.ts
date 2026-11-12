@@ -66,17 +66,6 @@ export async function putSource(
   }
 }
 
-export async function hasSource(transferId: string): Promise<boolean> {
-  const dir = await transfersDir(false);
-  if (!dir) return false;
-  try {
-    await dir.getFileHandle(sourceFileName(transferId));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function sourceSize(transferId: string): Promise<number> {
   const dir = await transfersDir(false);
   if (!dir) return 0;

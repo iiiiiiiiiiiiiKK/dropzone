@@ -157,7 +157,7 @@ pnpm dev:signal   # 终端 2：信令中继 ws://127.0.0.1:8787
 | --- | --- |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm build` | 类型检查 + `vite build` → `dist/` |
-| `pnpm test` | `vitest run` —— 19 个单元测试，覆盖分帧、设备身份、配对与格式化函数 |
+| `pnpm test` | `vitest run` —— 54 个单元测试，覆盖分帧、分块预算、设备身份、配对、续传算术、身份策略与格式化函数 |
 | `pnpm test:signal` | `node tests/signal-local.mjs` —— 针对运行中的中继执行协议 v1 集成测试（加 `SIGNAL_URL=…` 可指向线上部署） |
 | `pnpm preview` | 本地预览构建产物 |
 | `pnpm worker:dev` / `pnpm worker:deploy` | Cloudflare Worker + Durable Object 变体的本地运行与部署 |
@@ -166,21 +166,21 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 
 ### 部署
 
-前端是静态产物，信令是独立服务，因此线上演示拆成两部分：**Web UI（PWA）托管在 GitHub Pages**（https://iiiiiiiiiiiiiKK.github.io/dropzone/），**信令中继 v1 运行在 Cloudflare Workers**（`wss://dropzone-signaling.changyuansex.workers.dev/ws`，Worker + Durable Object），TURN 中继可选、由自建 coturn 提供。产物在运行时读取 `config.json` 获得中继地址，因此 fork 之后改指向自己的中继无需重新构建；也可以在构建时通过 `VITE_SIGNAL_URL` 写入。详细步骤（GitHub Pages、Cloudflare Pages、Docker/VPS、coturn）见 [docs/deployment.md](docs/deployment.md)。
+前端是静态产物，信令是独立服务。当前有两套同源部署：**GitHub Pages**（https://iiiiiiiiiiiiiKK.github.io/dropzone/）与**自建 https://cs.321.market**；两者产物相同，通过 `config.json` 的 `signalUrl` 指向 `wss://cs.321.market/ws`。Cloudflare Worker + Durable Object 变体与自建 coturn 中继均保留在仓库中，可按需切换。产物在运行时读取 `config.json` 获得中继地址，因此 fork 之后改指向自己的中继无需重新构建；也可以在构建时通过 `VITE_SIGNAL_URL` 写入。详细步骤（GitHub Pages、Cloudflare Pages、Docker/VPS、coturn）见 [docs/deployment.md](docs/deployment.md)。
 
 ### 安全与隐私
 
 - 文件字节、文件名、文本与历史记录从不离开浏览器；仓库里没有任何上传路由。
 - P-256 私钥以**不可导出**方式重新导入 Web Crypto，只能签名、无法导出。
 - 中继能看到：设备 id、显示名、设备类型、公钥、在线状态、配对邀请哈希、SDP/ICE 内容、消息大小与时序。中继看不到：文件内容、文件名、文件类型、文件大小、文本便签。
-- 中继在**对端发现**环节仍然是被信任的：它知道谁在线，理论上可以在配对时替换公钥——这正是安全码与 ECDSA 签名校验存在的理由，怀疑时可双方核对安全码。
+- 中继在**首次配对**时仍被信任：二维码里的公钥由发起方提供，中继若同时篡改双方视角仍可能造成误配对，因此两端应核对安全码。**配对完成之后**，握手会用本地保存的公钥校验对方出示的公钥，中继替换密钥会被判为「公钥不一致」而不是「已验证」。
 - TURN 只转发密文；`wss://` 是生产必需，`ws://` 仅供本地开发。
 
 ### 验证状态（真实执行）
 
 | 检查项 | 方式 | 结果 |
 | --- | --- | --- |
-| 单元测试 | `pnpm test`（Vitest） | **47 项全部通过**：分帧编解码、分块预算、P-256 身份与签名、安全码、配对令牌、断点续传算术、OPFS 路径、格式化函数 |
+| 单元测试 | `pnpm test`（Vitest） | **54 项全部通过**：分帧编解码、分块预算、P-256 身份与签名、安全码、配对令牌、断点续传算术、OPFS 路径、身份绑定策略、格式化函数 |
 | 信令协议 v1 | `pnpm test:signal` | Node 中继上 **21 项检查通过**（一次性邀请、仅已配对设备可转发、限流、32 KiB 帧上限、TURN HMAC 凭证、来源拒绝）；同一套测试在 `wrangler dev` 的 Worker 变体上同样通过 |
 | 生产构建 | `pnpm build` | `tsc --noEmit` 无错误，`vite build` 产出 `dist/` |
 | 浏览器端到端 | 两个真实 Chromium 上下文 + 真实用户操作 | 通过一次性二维码/链接完成配对，交换 offer/answer/ICE，**32 B** 与 **150 000 B** 文件传输完成后双方 SHA-256 一致，接收端可从 IndexedDB 读出文件 |
@@ -361,7 +361,7 @@ OPFS 写入是尽力而为：不支持 OPFS、配额不足或文件小于 1 MB �
 - 通过 File System Access API 流式写盘接收，其余浏览器使用有界内存回退。
 - 一对多群发之外的其余路线（跨刷新续传已实现）。
 - 一对多群发（一次发往多台自己的设备）。
-- 显式的设备撤销界面与可见的信任台账（当前握手已校验配对公钥，但没有独立的信任台账页面）。
+- 独立的信任台账页面（当前只有状态徽章与安全码展示，没有可翻阅的密钥变更历史）。
 - 依据 `getStats()` 往返时延自适应调整分块与速率。
 - 真实浏览器端到端测试（双对等上下文、剪贴板、移动布局）。
 
@@ -646,6 +646,3 @@ The frontend is a static bundle and the relay is a separate service, so a static
 | --- | --- | --- |
 | Web UI (PWA) | GitHub Pages | https://iiiiiiiiiiiiiKK.github.io/dropzone/ |
 | Signaling relay v1 (Worker + Durable Object) | Cloudflare Workers | `wss://dropzone-signaling.changyuansex.workers.dev/ws` |
-| TURN relay | optional, self-hosted coturn | configured through `TURN_URLS` / `TURN_SECRET` |
-
-The bundle reads its relay from `config.json` at runtime, so pointing a fork at your own relay needs no rebuild.

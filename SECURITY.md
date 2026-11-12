@@ -26,7 +26,7 @@ DROPZONE moves files between your own devices over an encrypted peer-to-peer cha
 **Out of scope — the design does not defend against these**
 
 - A compromised endpoint: malware on either device, a malicious browser extension, or a hostile OS can read whatever the page can read, including IndexedDB.
-- A malicious signaling relay performing a full man-in-the-middle *at pairing time*. It can substitute keys; the safety number is the only defence, and only if a human compares it.
+- A malicious signaling relay performing a full man-in-the-middle *during the first pairing*. Whoever scans the QR trusts the key printed there, so a relay that rewrites both sides at that moment can still cause a wrong pairing; the safety number is the defence, and only if a human compares it. After pairing, the stored key pins the peer and a substitution is reported as a mismatch.
 - Denial of service against your own relay or TURN server.
 - Traffic analysis: the relay observes connection timing, message sizes and online presence.
 - Physical access to an unlocked device.

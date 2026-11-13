@@ -210,13 +210,13 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 
 - `tsc --noEmit`：干净。
 - `vitest run`：**54 项通过**（新增 `contiguousInfo`、OPFS 阈值与 `trust.ts` 身份策略用例）。
-- `vite build`：成功，主包 804.29 kB / gzip 264.14 kB。
+- `vite build`：成功，主包 805.32 kB / gzip 264.46 kB。
 - 端到端（iPhone 视口 → 桌面）：8.6 MB `.mov` **completed**，落盘 8600000，记录中 `chunkSize=64512`。
 - 跨刷新续传（12 MB，中途强制刷新发送端）：**completed**，落盘 12582912，`resumeOffset` 从 3096576 继续。
 
 ### 已知剩余风险
 
-- 接收完成阶段仍会把整份载荷组装成 Blob 并一次性计算摘要，超大文件在内存受限的移动设备上仍有峰值风险（需要流式落盘才能根治）。
+- 接收完成阶段仍会把整份载荷组装成一个 Blob 才能落盘（已去掉多余的视图数组，摘要改为逐块计算），超大文件在内存受限的移动设备上仍有峰值风险，根治需要流式落盘接收。
 - 真实 iOS/WebKit、iOS 主屏 PWA 与公网 TURN 连通性需要实机与云安全组配合验证；本轮只覆盖静态代码与本地 Chromium 端到端。
 - 依赖安全审计未能执行：当前 registry 的 audit 端点不可用（`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`）。
 
@@ -224,7 +224,7 @@ CI 在 Node 22 / `ubuntu-latest` 上依次执行 `pnpm install --frozen-lockfile
 
 上一轮的续传只覆盖「发送端还活着、自己重试」；如果是**手机发到电脑**、中途手机被锁屏/切后台/刷新，发送端自己不会重试，电脑端就一直停在「接收中」或直接中断。现在补上了接收端主动追讨的路径：
 
-**协议新增 `RESUME` 帧（type 12）**：接收端发现自己已存部分分块、但 25 秒没收到新数据时，向发送端发 `RESUME{transferId}`；发送端收到后从 OPFS 重新读出源文件、带着同一 transferId 继续发送，接收端按已收连续块回报偏移。
+**协议新增 `RESUME` 帧（type 12）**：接收端发现自己已存部分分块、但 25 秒没收到新数据时，向发送端发 `RESUME{transferId}`；发送端收到后用同一 transferId 继续发送，接收端按已收连续块回报偏移。
 
 **接收端追讨有上限**：最多追问 3 次（每次重新计 25 秒窗口），仍无响应就把记录落成 `interrupted` 并**保留字节**；之后任何一次重连（roster 刷新 / 打开页面）都会再次 `requestResume()`，不会丢进度、也不会无限刷屏。
 
@@ -645,4 +645,3 @@ The frontend is a static bundle and the relay is a separate service, so a static
 | Piece | Where it runs | URL |
 | --- | --- | --- |
 | Web UI (PWA) | GitHub Pages | https://iiiiiiiiiiiiiKK.github.io/dropzone/ |
-| Signaling relay v1 (Worker + Durable Object) | Cloudflare Workers | `wss://dropzone-signaling.changyuansex.workers.dev/ws` |
